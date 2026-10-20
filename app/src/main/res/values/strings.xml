@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">弹幕通知</string>
+    <string name="channel_name">弹幕悬浮服务</string>
+    <string name="channel_desc">保持弹幕悬浮层运行</string>
+</resources>
