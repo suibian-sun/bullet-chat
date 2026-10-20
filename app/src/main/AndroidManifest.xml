@@ -34,6 +34,13 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".AppPickerActivity"
+            android:exported="false"
+            android:label="通知来源"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.BulletChat" />
+
         <service
             android:name=".service.BulletNotificationListener"
             android:exported="true"

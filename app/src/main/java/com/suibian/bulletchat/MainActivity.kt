@@ -1,671 +1,749 @@
 package com.suibian.bulletchat
 
 import android.Manifest
+import android.app.Activity
+import android.app.AlertDialog
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.graphics.Typeface
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.text.Editable
+import android.text.InputType
+import android.text.TextWatcher
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.SeekBar
+import android.widget.Switch
+import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Notifications
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.suibian.bulletchat.data.AppSettings
+import com.suibian.bulletchat.data.DisplayOrientation
 import com.suibian.bulletchat.data.SettingsStore
 import com.suibian.bulletchat.service.OverlayService
-import com.suibian.bulletchat.ui.theme.AccentCyan
-import com.suibian.bulletchat.ui.theme.BulletChatTheme
-import com.suibian.bulletchat.ui.theme.SuccessGreen
-import com.suibian.bulletchat.ui.theme.WarnAmber
-import kotlin.math.roundToInt
+import com.suibian.bulletchat.ui.Palette
+import com.suibian.bulletchat.ui.dp
+import com.suibian.bulletchat.ui.roundedBackground
+import com.suibian.bulletchat.ui.textView
 
-class MainActivity : ComponentActivity() {
+class MainActivity : Activity() {
+
+    private lateinit var settings: AppSettings
+    private var binding = false
+
+    private lateinit var serviceSwitch: Switch
+    private lateinit var statusView: TextView
+    private lateinit var notificationStatus: TextView
+    private lateinit var overlayStatus: TextView
+    private lateinit var dndStatus: TextView
+    private lateinit var batteryStatus: TextView
+    private lateinit var sourceSummary: TextView
+    private lateinit var orientationValue: TextView
+    private lateinit var floatingSwitch: Switch
+
+    private val labelCache = HashMap<String, String>()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         SettingsStore.init(this)
-        setContent {
-            BulletChatTheme {
-                val settings by SettingsStore.settings.collectAsStateWithLifecycle()
-                BulletChatScreen(
-                    settings = settings,
-                    onUpdate = { updated -> SettingsStore.update { updated } },
-                )
-            }
-        }
+        settings = SettingsStore.settings.value
 
-        val current = SettingsStore.settings.value
-        if (current.enabled && Settings.canDrawOverlays(this)) {
-            OverlayService.start(this)
-        }
-    }
-}
+        window.statusBarColor = Palette.BG
+        window.navigationBarColor = Palette.BG
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun BulletChatScreen(
-    settings: AppSettings,
-    onUpdate: (AppSettings) -> Unit,
-) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    var hasListener by remember { mutableStateOf(hasNotificationAccess(context)) }
-    var hasOverlay by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
-    var batteryFree by remember { mutableStateOf(isIgnoringBatteryOptimizations(context)) }
-
-    val notificationPermission = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-    ) { }
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                hasListener = hasNotificationAccess(context)
-                hasOverlay = Settings.canDrawOverlays(context)
-                batteryFree = isIgnoringBatteryOptimizations(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        setContentView(createContentView())
+        refreshUi()
     }
 
-    fun toggleService(enable: Boolean) {
+    override fun onResume() {
+        super.onResume()
+        settings = SettingsStore.settings.value
+        refreshUi()
+        if (settings.enabled) {
+            OverlayService.refreshChannel(this)
+        }
+    }
+
+    override fun onPause() {
+        SettingsStore.persist()
+        super.onPause()
+    }
+
+    private fun createContentView(): View {
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            setBackgroundColor(Palette.BG)
+            isVerticalScrollBarEnabled = false
+        }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(10), dp(16), dp(32))
+        }
+        scroll.addView(
+            root,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
+        root.addView(textView("弹幕通知", 26f, Palette.TEXT, true))
+        root.addView(
+            textView("微信 / QQ 消息，弹幕化提醒", 12f, Palette.MUTED).apply {
+                setPadding(0, dp(5), 0, dp(2))
+            },
+        )
+
+        root.addView(heroCard(), matchWrap(top = 14))
+        root.addView(permissionCard(), matchWrap(top = 12))
+        root.addView(sourceCard(), matchWrap(top = 12))
+        root.addView(displayCard(), matchWrap(top = 12))
+        root.addView(appearanceCard(), matchWrap(top = 12))
+        root.addView(filterCard(), matchWrap(top = 12))
+
+        val testButton = Button(this).apply {
+            text = "发送测试弹幕"
+            isAllCaps = false
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            setTextColor(Palette.ACCENT_DARK)
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            backgroundTintList = ColorStateList.valueOf(Palette.ACCENT)
+            stateListAnimator = null
+            setOnClickListener {
+                when {
+                    !settings.enabled -> toast("请先打开顶部总开关")
+                    !Settings.canDrawOverlays(this@MainActivity) -> {
+                        toast("请先授予悬浮窗权限")
+                        openOverlaySettings()
+                    }
+                    else -> OverlayService.sendTest(this@MainActivity)
+                }
+            }
+        }
+        root.addView(testButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(50)).apply {
+            topMargin = dp(16)
+        })
+
+        root.addView(guideCard(), matchWrap(top = 12))
+        root.addView(
+            textView(
+                "BulletChat ${BuildConfig.VERSION_NAME} · 本地运行 · 无网络权限",
+                11f,
+                Palette.MUTED,
+            ).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, dp(20), 0, 0)
+                alpha = 0.75f
+            },
+        )
+
+        return scroll
+    }
+
+    private fun heroCard(): LinearLayout {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Palette.HERO_START, Palette.HERO_END),
+            ).apply { cornerRadius = dp(22).toFloat() }
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+        }
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val icon = ImageView(this).apply {
+            setImageResource(R.drawable.ic_launcher_foreground)
+            background = roundedBackground(0x225FE3F3, 13f)
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+        }
+        row.addView(icon, LinearLayout.LayoutParams(dp(42), dp(42)))
+
+        val titles = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), 0, 0, 0)
+        }
+        titles.addView(textView("弹幕通知", 19f, Palette.TEXT, true))
+        statusView = textView("● 未开启", 12f, Palette.MUTED).apply {
+            setPadding(0, dp(3), 0, 0)
+        }
+        titles.addView(statusView)
+        row.addView(titles, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+        serviceSwitch = styledSwitch()
+        serviceSwitch.setOnCheckedChangeListener { _, checked ->
+            if (binding) return@setOnCheckedChangeListener
+            setServiceEnabled(checked)
+        }
+        row.addView(serviceSwitch)
+
+        card.addView(row)
+        card.addView(
+            textView(
+                "消息化作弹幕从屏幕上飘过，位置、透明度、字号、速度都能调。",
+                13f,
+                0xFFA9BCCD.toInt(),
+            ).apply {
+                setPadding(0, dp(13), 0, 0)
+                setLineSpacing(0f, 1.15f)
+            },
+        )
+        return card
+    }
+
+    private fun permissionCard(): LinearLayout {
+        val card = sectionCard("运行权限")
+
+        notificationStatus = permissionRow(card, "通知使用权", "读取所选应用的新消息，仅在本机解析") {
+            openNotificationAccess()
+        }
+        overlayStatus = permissionRow(card, "悬浮窗权限", "在其他应用上方显示弹幕") {
+            openOverlaySettings()
+        }
+        dndStatus = permissionRow(card, "免打扰权限", "授权后前台通知在勿扰模式下也不受限（可选）") {
+            openDndAccess()
+        }
+        batteryStatus = permissionRow(card, "后台运行", "忽略电池优化，避免服务被清理（可选）") {
+            requestBatteryExemption()
+        }
+
+        card.addView(
+            textView(
+                "小米 / 红米、OPPO、vivo 等机型还需允许「后台弹出界面」与自启动。",
+                11f,
+                Palette.MUTED,
+            ).apply {
+                setPadding(0, dp(12), 0, 0)
+                setLineSpacing(0f, 1.2f)
+            },
+        )
+        return card
+    }
+
+    private fun sourceCard(): LinearLayout {
+        val card = sectionCard("通知来源")
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            background = selectableBackground()
+            setOnClickListener { openAppPicker() }
+            setPadding(0, dp(6), 0, dp(6))
+        }
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(textView("接收哪些应用的通知", 14f, Palette.TEXT))
+        sourceSummary = textView("", 11f, Palette.MUTED).apply { setPadding(0, dp(3), 0, 0) }
+        column.addView(sourceSummary)
+        row.addView(column, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(textView("选择  ›", 13f, Palette.ACCENT).apply { setPadding(dp(10), dp(8), 0, dp(8)) })
+        card.addView(row)
+
+        card.addView(
+            textView("默认仅接收微信与 QQ；可自由勾选任意已安装应用。", 11f, Palette.MUTED).apply {
+                setPadding(0, dp(6), 0, 0)
+            },
+        )
+        return card
+    }
+
+    private fun displayCard(): LinearLayout {
+        val card = sectionCard("显示方式")
+
+        val orientationRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            background = selectableBackground()
+            setPadding(0, dp(8), 0, dp(8))
+            setOnClickListener { showOrientationDialog() }
+        }
+        orientationRow.addView(
+            textView("显示范围", 14f, Palette.TEXT),
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        orientationValue = textView("全部方向  ›", 13f, Palette.ACCENT)
+        orientationRow.addView(orientationValue)
+        card.addView(orientationRow)
+
+        addSwitchRow(card, "仅亮屏时显示", "锁屏、息屏时不打扰", settings.onlyWhenScreenOn) { value ->
+            update { it.copy(onlyWhenScreenOn = value) }
+        }
+        addSwitchRow(card, "过滤群聊汇总", "减少「N 条新消息」这类重复弹幕", settings.skipGroupSummary) { value ->
+            update { it.copy(skipGroupSummary = value) }
+        }
+        addSwitchRow(card, "显示应用图标", "在弹幕左侧显示来源应用图标", settings.showAppIcon) { value ->
+            update { it.copy(showAppIcon = value) }
+        }
+
+        addSwitchRow(
+            card,
+            "点击弹幕打开应用",
+            "点中弹幕直达对应聊天；开启后弹幕区域会拦截触摸",
+            settings.clickToOpen,
+        ) { value ->
+            update { it.copy(clickToOpen = value) }
+            refreshUi()
+        }
+
+        floatingSwitch = addSwitchRow(
+            card,
+            "尝试小窗打开",
+            "系统支持自由窗口时以小窗显示，否则正常全屏打开",
+            settings.tryFloatingWindow,
+        ) { value ->
+            update { it.copy(tryFloatingWindow = value) }
+        }
+        return card
+    }
+
+    private fun appearanceCard(): LinearLayout {
+        val card = sectionCard("外观与位置")
+
+        addSliderRow(card, "垂直位置", { "$it% · 距屏幕顶部" }, 0, 70, settings.positionPercent) { value ->
+            applyTransient { it.copy(positionPercent = value) }
+        }
+        addSliderRow(card, "弹幕行数", { "$it 行" }, 1, 8, settings.laneCount) { value ->
+            applyTransient { it.copy(laneCount = value) }
+        }
+        addSliderRow(card, "透明度", { "$it%" }, 20, 100, settings.alphaPercent) { value ->
+            applyTransient { it.copy(alphaPercent = value) }
+        }
+        addSliderRow(card, "字号", { "$it sp" }, 12, 28, settings.fontSp) { value ->
+            applyTransient { it.copy(fontSp = value) }
+        }
+        addSliderRow(card, "速度", { "$it%" }, 50, 250, settings.speedPercent) { value ->
+            applyTransient { it.copy(speedPercent = value) }
+        }
+
+        val reset = textView("恢复默认外观", 12f, Palette.ACCENT).apply {
+            setPadding(0, dp(12), 0, dp(2))
+            isClickable = true
+            setOnClickListener {
+                update {
+                    it.copy(
+                        positionPercent = 12,
+                        laneCount = 5,
+                        alphaPercent = 85,
+                        fontSp = 16,
+                        speedPercent = 100,
+                    )
+                }
+                recreate()
+            }
+        }
+        card.addView(reset)
+        return card
+    }
+
+    private fun filterCard(): LinearLayout {
+        val card = sectionCard("关键词过滤")
+        card.addView(
+            textView("包含关键词的消息不会显示，多个关键词用逗号分隔。", 11f, Palette.MUTED).apply {
+                setPadding(0, dp(2), 0, dp(8))
+            },
+        )
+
+        val edit = EditText(this).apply {
+            setText(settings.blacklist)
+            hint = "例如：广告, 砍价, 转账"
+            setTextColor(Palette.TEXT)
+            setHintTextColor(0xFF64748B.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            background = roundedBackground(Palette.SURFACE_2, 14f)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            minLines = 2
+            gravity = Gravity.TOP or Gravity.START
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        }
+        edit.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                SettingsStore.update({ it.copy(blacklist = s?.toString().orEmpty()) }, persist = false)
+                settings = SettingsStore.settings.value
+            }
+        })
+        card.addView(edit, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        return card
+    }
+
+    private fun guideCard(): LinearLayout {
+        val card = sectionCard("使用说明")
+        val steps = listOf(
+            "开启「通知使用权」，并在系统列表中勾选「弹幕通知」",
+            "授予「悬浮窗权限」，部分机型还需允许「后台弹出界面」",
+            "选择通知来源应用，打开总开关",
+            "点击弹幕可直接跳转；小窗能力取决于系统是否支持",
+        )
+        steps.forEachIndexed { index, text ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.TOP
+                setPadding(0, dp(4), 0, dp(4))
+            }
+            val badge = TextView(this).apply {
+                this.text = (index + 1).toString()
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+                setTextColor(Palette.ACCENT)
+                gravity = Gravity.CENTER
+                background = roundedBackground(0x225FE3F3, 9f)
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+            row.addView(badge, LinearLayout.LayoutParams(dp(18), dp(18)))
+            row.addView(
+                textView(text, 12f, Palette.MUTED).apply {
+                    setPadding(dp(9), 0, 0, 0)
+                    setLineSpacing(0f, 1.2f)
+                },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            card.addView(row)
+        }
+
+        card.addView(
+            textView(
+                "隐私：通知只在本机读取与显示，应用未申请联网权限。",
+                11f,
+                Palette.MUTED,
+            ).apply { setPadding(0, dp(10), 0, 0) },
+        )
+        return card
+    }
+
+    private fun sectionCard(title: String): LinearLayout {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedBackground(Palette.SURFACE, 20f)
+            setPadding(dp(16), dp(15), dp(16), dp(15))
+        }
+        card.addView(textView(title, 15f, Palette.TEXT, true))
+        return card
+    }
+
+    private fun permissionRow(
+        card: LinearLayout,
+        title: String,
+        description: String,
+        action: () -> Unit,
+    ): TextView {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            setOnClickListener { action() }
+            setPadding(0, dp(11), 0, dp(3))
+        }
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(textView(title, 14f, Palette.TEXT))
+        column.addView(
+            textView(description, 11f, Palette.MUTED).apply {
+                setPadding(0, dp(3), 0, 0)
+                setLineSpacing(0f, 1.15f)
+            },
+        )
+        row.addView(column, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+        val status = textView("去开启", 12f, Palette.ACCENT).apply {
+            setPadding(dp(10), dp(6), 0, dp(6))
+        }
+        row.addView(status)
+        card.addView(row)
+        return status
+    }
+
+    private fun addSwitchRow(
+        card: LinearLayout,
+        title: String,
+        description: String,
+        checked: Boolean,
+        onChange: (Boolean) -> Unit,
+    ): Switch {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(9), 0, 0)
+        }
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(textView(title, 14f, Palette.TEXT))
+        column.addView(
+            textView(description, 11f, Palette.MUTED).apply {
+                setPadding(0, dp(3), 0, 0)
+                setLineSpacing(0f, 1.15f)
+            },
+        )
+        row.addView(column, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+        val toggle = styledSwitch().apply {
+            isChecked = checked
+            setOnCheckedChangeListener { _, value ->
+                if (!binding) onChange(value)
+            }
+        }
+        row.addView(toggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            marginStart = dp(10)
+        })
+        card.addView(row)
+        return toggle
+    }
+
+    private fun addSliderRow(
+        card: LinearLayout,
+        title: String,
+        formatter: (Int) -> String,
+        min: Int,
+        max: Int,
+        current: Int,
+        onChange: (Int) -> Unit,
+    ) {
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(14), 0, 0)
+        }
+        header.addView(
+            textView(title, 13f, Palette.MUTED),
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        val valueView = textView(formatter(current), 12f, Palette.ACCENT, true)
+        header.addView(valueView)
+        card.addView(header)
+
+        val bar = SeekBar(this).apply {
+            this.max = max - min
+            progress = (current - min).coerceIn(0, max - min)
+            progressTintList = ColorStateList.valueOf(Palette.ACCENT)
+            thumbTintList = ColorStateList.valueOf(Palette.ACCENT)
+            progressBackgroundTintList = ColorStateList.valueOf(Palette.SURFACE_2)
+            setPadding(0, dp(2), 0, dp(2))
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (!fromUser) return
+                    val value = progress + min
+                    valueView.text = formatter(value)
+                    onChange(value)
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    SettingsStore.persist()
+                }
+            })
+        }
+        card.addView(bar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+
+    private fun styledSwitch(): Switch = Switch(this).apply {
+        val checkedStates = intArrayOf(android.R.attr.state_checked)
+        val defaultStates = intArrayOf()
+        thumbTintList = ColorStateList(
+            arrayOf(checkedStates, defaultStates),
+            intArrayOf(Palette.ACCENT, 0xFF8A97A6.toInt()),
+        )
+        trackTintList = ColorStateList(
+            arrayOf(checkedStates, defaultStates),
+            intArrayOf(0x665FE3F3, 0xFF2B3949.toInt()),
+        )
+    }
+
+    private fun matchWrap(top: Int = 0) = LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams.MATCH_PARENT,
+        LinearLayout.LayoutParams.WRAP_CONTENT,
+    ).apply { topMargin = dp(top) }
+
+    private fun selectableBackground(): Drawable? {
+        val out = TypedValue()
+        theme.resolveAttribute(android.R.attr.selectableItemBackground, out, true)
+        return if (out.resourceId != 0) getDrawable(out.resourceId) else null
+    }
+
+    private fun refreshUi() {
+        binding = true
+        try {
+            serviceSwitch.isChecked = settings.enabled
+            statusView.text = if (settings.enabled) "● 运行中 · 弹幕已就绪" else "● 未开启"
+            statusView.setTextColor(if (settings.enabled) Palette.SUCCESS else Palette.MUTED)
+
+            setPermissionStatus(notificationStatus, hasNotificationAccess(), "已开启", "去开启")
+            setPermissionStatus(overlayStatus, Settings.canDrawOverlays(this), "已开启", "去授予")
+            setPermissionStatus(dndStatus, hasDndAccess(), "已授权", "去授权")
+            setPermissionStatus(batteryStatus, isIgnoringBattery(), "已忽略", "去设置")
+
+            sourceSummary.text = sourceSummaryText()
+            orientationValue.text = settings.displayOrientation.label + "  ›"
+            floatingSwitch.isChecked = settings.tryFloatingWindow
+            floatingSwitch.isEnabled = settings.clickToOpen
+            floatingSwitch.alpha = if (settings.clickToOpen) 1f else 0.4f
+        } finally {
+            binding = false
+        }
+    }
+
+    private fun setPermissionStatus(view: TextView, granted: Boolean, grantedText: String, actionText: String) {
+        view.text = if (granted) grantedText else actionText
+        view.setTextColor(if (granted) Palette.SUCCESS else Palette.ACCENT)
+    }
+
+    private fun sourceSummaryText(): String {
+        val labels = settings.selectedPackages.mapNotNull { labelFor(it) }.sorted()
+        return when {
+            labels.isEmpty() -> "未选择任何应用 · 不会显示弹幕"
+            labels.size <= 2 -> labels.joinToString("、")
+            else -> "${labels.take(2).joinToString("、")} 等 ${labels.size} 个应用"
+        }
+    }
+
+    private fun labelFor(packageName: String): String? {
+        labelCache[packageName]?.let { return it }
+        return try {
+            val info = packageManager.getApplicationInfo(packageName, 0)
+            packageManager.getApplicationLabel(info).toString().also { labelCache[packageName] = it }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun setServiceEnabled(enable: Boolean) {
         if (!enable) {
-            onUpdate(settings.copy(enabled = false))
-            OverlayService.stop(context)
+            update { it.copy(enabled = false) }
+            OverlayService.stop(this)
+            refreshUi()
             return
         }
-        if (!hasOverlay) {
-            Toast.makeText(context, "请先授予悬浮窗权限", Toast.LENGTH_SHORT).show()
-            openOverlaySettings(context)
+        if (!Settings.canDrawOverlays(this)) {
+            toast("请先授予悬浮窗权限")
+            openOverlaySettings()
+            refreshUi()
             return
         }
-        if (!hasListener) {
-            Toast.makeText(context, "请先开启通知使用权，否则读不到微信 / QQ 消息", Toast.LENGTH_LONG).show()
-            openNotificationAccess(context)
+        if (!hasNotificationAccess()) {
+            toast("请先开启通知使用权，否则读不到消息")
+            openNotificationAccess()
+            refreshUi()
             return
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
-        onUpdate(settings.copy(enabled = true))
-        OverlayService.start(context)
+        update { it.copy(enabled = true) }
+        OverlayService.start(this)
+        refreshUi()
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = { Text("弹幕通知", fontWeight = FontWeight.SemiBold) },
-                actions = {
-                    Text(
-                        "v${BuildConfig.VERSION_NAME}",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(end = 16.dp),
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+    private fun update(transform: (AppSettings) -> AppSettings) {
+        SettingsStore.update(transform)
+        settings = SettingsStore.settings.value
+    }
+
+    private fun applyTransient(transform: (AppSettings) -> AppSettings) {
+        SettingsStore.update(transform, persist = false)
+        settings = SettingsStore.settings.value
+    }
+
+    private fun showOrientationDialog() {
+        val labels = DisplayOrientation.entries.map { it.label }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("显示范围")
+            .setSingleChoiceItems(labels, settings.displayOrientation.ordinal) { dialog, which ->
+                update { it.copy(displayOrientation = DisplayOrientation.entries[which]) }
+                dialog.dismiss()
+                refreshUi()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun openAppPicker() {
+        startActivity(Intent(this, AppPickerActivity::class.java))
+    }
+
+    private fun hasNotificationAccess(): Boolean =
+        NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
+
+    private fun hasDndAccess(): Boolean =
+        getSystemService(NotificationManager::class.java)?.isNotificationPolicyAccessGranted == true
+
+    private fun isIgnoringBattery(): Boolean {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
+        return powerManager.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    private fun openNotificationAccess() {
+        try {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        } catch (_: Throwable) {
+            try {
+                startActivity(Intent(Settings.ACTION_SETTINGS))
+            } catch (_: Throwable) {
+                // ignore
+            }
+        }
+    }
+
+    private fun openOverlaySettings() {
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName"),
                 ),
             )
-        },
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            HeroCard(settings = settings, onToggle = ::toggleService)
-
-            PermissionCard(
-                hasListener = hasListener,
-                hasOverlay = hasOverlay,
-                batteryFree = batteryFree,
-                onListener = { openNotificationAccess(context) },
-                onOverlay = { openOverlaySettings(context) },
-                onBattery = { requestBatteryExemption(context) },
-            )
-
-            SectionCard(title = "消息来源") {
-                SettingSwitchRow(
-                    title = "微信",
-                    description = "私聊、群聊的全部通知",
-                    checked = settings.wechatEnabled,
-                    onCheckedChange = { onUpdate(settings.copy(wechatEnabled = it)) },
-                )
-                SettingSwitchRow(
-                    title = "QQ / TIM",
-                    description = "私聊、群聊的全部通知",
-                    checked = settings.qqEnabled,
-                    onCheckedChange = { onUpdate(settings.copy(qqEnabled = it)) },
-                )
-                SettingSwitchRow(
-                    title = "其他应用",
-                    description = "默认关闭，开启后接收所有应用的通知",
-                    checked = settings.otherAppsEnabled,
-                    onCheckedChange = { onUpdate(settings.copy(otherAppsEnabled = it)) },
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-                SettingSwitchRow(
-                    title = "仅亮屏时显示",
-                    description = "锁屏、息屏时不打扰",
-                    checked = settings.onlyWhenScreenOn,
-                    onCheckedChange = { onUpdate(settings.copy(onlyWhenScreenOn = it)) },
-                )
-                SettingSwitchRow(
-                    title = "过滤群聊汇总",
-                    description = "减少「N 条新消息」这类重复弹幕",
-                    checked = settings.skipGroupSummary,
-                    onCheckedChange = { onUpdate(settings.copy(skipGroupSummary = it)) },
-                )
-                SettingSwitchRow(
-                    title = "显示应用图标",
-                    description = "在弹幕左侧显示来源 App 图标",
-                    checked = settings.showAppIcon,
-                    onCheckedChange = { onUpdate(settings.copy(showAppIcon = it)) },
-                )
-            }
-
-            SectionCard(
-                title = "外观与位置",
-                trailing = {
-                    TextButton(
-                        onClick = {
-                            onUpdate(
-                                settings.copy(
-                                    positionPercent = 16,
-                                    laneCount = 4,
-                                    alphaPercent = 85,
-                                    fontSp = 16,
-                                    speedPercent = 100,
-                                ),
-                            )
-                        },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                    ) {
-                        Text("重置", fontSize = 12.sp)
-                    }
-                },
-            ) {
-                SettingSliderRow(
-                    title = "垂直位置",
-                    valueLabel = "${settings.positionPercent}% · 距屏幕顶部",
-                    value = settings.positionPercent.toFloat(),
-                    range = 0f..70f,
-                    onValueChange = { onUpdate(settings.copy(positionPercent = it.roundToInt())) },
-                )
-                SettingSliderRow(
-                    title = "弹幕行数",
-                    valueLabel = "${settings.laneCount} 行",
-                    value = settings.laneCount.toFloat(),
-                    range = 1f..8f,
-                    onValueChange = { onUpdate(settings.copy(laneCount = it.roundToInt())) },
-                )
-                SettingSliderRow(
-                    title = "透明度",
-                    valueLabel = "${settings.alphaPercent}%",
-                    value = settings.alphaPercent.toFloat(),
-                    range = 20f..100f,
-                    onValueChange = { onUpdate(settings.copy(alphaPercent = it.roundToInt())) },
-                )
-                SettingSliderRow(
-                    title = "字号",
-                    valueLabel = "${settings.fontSp} sp",
-                    value = settings.fontSp.toFloat(),
-                    range = 12f..28f,
-                    onValueChange = { onUpdate(settings.copy(fontSp = it.roundToInt())) },
-                )
-                SettingSliderRow(
-                    title = "速度",
-                    valueLabel = "${settings.speedPercent}%",
-                    value = settings.speedPercent.toFloat(),
-                    range = 50f..250f,
-                    onValueChange = { onUpdate(settings.copy(speedPercent = it.roundToInt())) },
-                )
-                Text(
-                    "调节后立即生效，无需重启服务。",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            SectionCard(title = "关键词过滤") {
-                Text(
-                    "包含关键词的消息不会显示，多个关键词用逗号分隔。",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = settings.blacklist,
-                    onValueChange = { onUpdate(settings.copy(blacklist = it)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("例如：广告, 砍价, 转账", fontSize = 13.sp) },
-                    textStyle = TextStyle(fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface),
-                    minLines = 2,
-                    shape = RoundedCornerShape(14.dp),
-                )
-            }
-
-            Button(
-                onClick = {
-                    if (!settings.enabled) {
-                        Toast.makeText(context, "请先打开顶部的总开关", Toast.LENGTH_SHORT).show()
-                    } else {
-                        OverlayService.sendTest(context)
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("发送测试弹幕", fontWeight = FontWeight.SemiBold)
-            }
-
-            SectionCard(title = "使用说明") {
-                GuideStep("1", "开启「通知使用权」，并在系统列表中勾选「弹幕通知」")
-                GuideStep("2", "授予「悬浮窗权限」，部分机型还需允许「后台弹出界面」")
-                GuideStep("3", "打开总开关，收到微信 / QQ 消息即可看到弹幕")
-                GuideStep("4", "回到本页可随时调整位置、透明度、字号和速度")
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-                Text(
-                    "隐私：所有通知仅在本机读取与显示，应用未申请联网权限，不会上传任何内容。",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 16.sp,
-                )
-            }
-
-            Text(
-                "BulletChat ${BuildConfig.VERSION_NAME} · 本地运行 · 无网络权限",
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            )
-            Spacer(Modifier.height(24.dp))
-        }
-    }
-}
-
-@Composable
-private fun HeroCard(settings: AppSettings, onToggle: (Boolean) -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Brush.linearGradient(listOf(Color(0xFF123244), Color(0xFF0B292B))))
-                .padding(20.dp),
-        ) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0x2E5FE3F3)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Rounded.Notifications, contentDescription = null, tint = AccentCyan)
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("弹幕通知", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(if (settings.enabled) SuccessGreen else Color(0xFF64748B)),
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                if (settings.enabled) "运行中 · 弹幕已就绪" else "未开启",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    Switch(checked = settings.enabled, onCheckedChange = onToggle)
-                }
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    "微信、QQ 消息化作弹幕从屏幕上飘过，不打断你正在做的事。",
-                    fontSize = 13.sp,
-                    color = Color(0xFFA9BCCD),
-                    lineHeight = 19.sp,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PermissionCard(
-    hasListener: Boolean,
-    hasOverlay: Boolean,
-    batteryFree: Boolean,
-    onListener: () -> Unit,
-    onOverlay: () -> Unit,
-    onBattery: () -> Unit,
-) {
-    SectionCard(title = "运行权限") {
-        PermissionRow(
-            title = "通知使用权",
-            description = "读取微信 / QQ 新消息，仅在本机解析",
-            granted = hasListener,
-            actionLabel = "去开启",
-            onAction = onListener,
-        )
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-        PermissionRow(
-            title = "悬浮窗权限",
-            description = "在其他应用上方显示弹幕",
-            granted = hasOverlay,
-            actionLabel = "去授予",
-            onAction = onOverlay,
-        )
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-        PermissionRow(
-            title = "后台运行（可选）",
-            description = "避免系统清理导致弹幕中断",
-            granted = batteryFree,
-            actionLabel = "去设置",
-            onAction = onBattery,
-        )
-        Text(
-            "小米 / 红米、OPPO、vivo 等机型还需在系统设置中允许「后台弹出界面」与自启动。",
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            lineHeight = 16.sp,
-        )
-    }
-}
-
-@Composable
-private fun PermissionRow(
-    title: String,
-    description: String,
-    granted: Boolean,
-    actionLabel: String,
-    onAction: () -> Unit,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = if (granted) Icons.Rounded.CheckCircle else Icons.Rounded.Warning,
-            contentDescription = null,
-            tint = if (granted) SuccessGreen else WarnAmber,
-            modifier = Modifier.size(19.dp),
-        )
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 14.sp)
-            Text(
-                description,
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 15.sp,
-            )
-        }
-        if (granted) {
-            Text("已开启", fontSize = 11.sp, color = SuccessGreen)
-        } else {
-            TextButton(
-                onClick = onAction,
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-            ) {
-                Text(actionLabel, fontSize = 12.sp)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingSwitchRow(
-    title: String,
-    description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 14.sp)
-            Text(
-                description,
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 15.sp,
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun SettingSliderRow(
-    title: String,
-    valueLabel: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    onValueChange: (Float) -> Unit,
-) {
-    Column(Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(title, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(
-                valueLabel,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Medium,
-            )
-        }
-        Slider(
-            value = value.coerceIn(range.start, range.endInclusive),
-            onValueChange = onValueChange,
-            valueRange = range,
-            modifier = Modifier.fillMaxWidth(),
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary,
-                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-            ),
-        )
-    }
-}
-
-@Composable
-private fun SectionCard(
-    title: String,
-    trailing: (@Composable () -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    title,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                trailing?.invoke()
-            }
-            content()
-        }
-    }
-}
-
-@Composable
-private fun GuideStep(index: String, text: String) {
-    Row(verticalAlignment = Alignment.Top) {
-        Box(
-            modifier = Modifier
-                .size(20.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                index,
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-        Spacer(Modifier.width(10.dp))
-        Text(
-            text,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            lineHeight = 18.sp,
-        )
-    }
-}
-
-private fun hasNotificationAccess(context: Context): Boolean =
-    NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
-
-private fun isIgnoringBatteryOptimizations(context: Context): Boolean {
-    val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
-    return powerManager.isIgnoringBatteryOptimizations(context.packageName)
-}
-
-private fun openNotificationAccess(context: Context) {
-    try {
-        context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-    } catch (_: Throwable) {
-        try {
-            context.startActivity(Intent(Settings.ACTION_SETTINGS))
         } catch (_: Throwable) {
-            // ignore
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+            } catch (_: Throwable) {
+                // ignore
+            }
         }
     }
-}
 
-private fun openOverlaySettings(context: Context) {
-    val intent = Intent(
-        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-        Uri.parse("package:${context.packageName}"),
-    )
-    try {
-        context.startActivity(intent)
-    } catch (_: Throwable) {
+    private fun openDndAccess() {
         try {
-            context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
         } catch (_: Throwable) {
-            // ignore
+            toast("当前系统没有免打扰授权页面")
         }
     }
-}
 
-private fun requestBatteryExemption(context: Context) {
-    try {
-        context.startActivity(
-            Intent(
-                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                Uri.parse("package:${context.packageName}"),
-            ),
-        )
-    } catch (_: Throwable) {
+    private fun requestBatteryExemption() {
         try {
-            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName"),
+                ),
+            )
         } catch (_: Throwable) {
-            // ignore
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: Throwable) {
+                // ignore
+            }
         }
+    }
+
+    private fun toast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 }

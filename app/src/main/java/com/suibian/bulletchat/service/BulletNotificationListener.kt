@@ -37,7 +37,7 @@ class BulletNotificationListener : NotificationListenerService() {
         val pkg = sbn.packageName ?: return
         if (pkg == packageName) return
         if (pkg == "android" || pkg == "com.android.systemui") return
-        if (!settings.isSourceEnabled(pkg)) return
+        if (!settings.accepts(pkg)) return
 
         // 常驻通知（音乐、下载、充电等）不是聊天消息
         if (sbn.isOngoing) return
@@ -55,7 +55,7 @@ class BulletNotificationListener : NotificationListenerService() {
         if (isDuplicate("$pkg|$title|$text")) return
 
         val appLabel = resolveAppLabel(pkg)
-        val icon = if (settings.showAppIcon) AppIconLoader.load(this, pkg) else null
+        val icon = if (settings.showAppIcon) AppIconLoader.load(this, pkg, 36) else null
         DanmakuBus.emit(
             DanmakuMessage(
                 packageName = pkg,
@@ -63,48 +63,64 @@ class BulletNotificationListener : NotificationListenerService() {
                 title = title,
                 text = text,
                 icon = icon,
+                contentIntent = notification.contentIntent,
             ),
         )
     }
 
+    /**
+     * 提取标题与正文。
+     * 关键点：微信 / QQ 的长消息会把截断版本放在 EXTRA_TEXT，全文放在 EXTRA_BIG_TEXT，
+     * 因此不能用「第一个非空」策略，而要取更完整（更长）的那一份，保证弹幕不丢内容。
+     */
     private fun extractContent(notification: Notification): Pair<String, String> {
         val extras = notification.extras ?: return "" to ""
 
         val title = sequenceOf(
-            Notification.EXTRA_TITLE,
             Notification.EXTRA_CONVERSATION_TITLE,
+            Notification.EXTRA_TITLE,
             Notification.EXTRA_TITLE_BIG,
         ).mapNotNull { key ->
-            extras.getCharSequence(key)?.toString()?.trim()?.takeIf { it.isNotBlank() }
+            extras.getCharSequence(key)?.toString()?.cleanWhitespace()?.takeIf { it.isNotBlank() }
         }.firstOrNull().orEmpty()
 
-        var text = sequenceOf(
+        val shortText = sequenceOf(
             Notification.EXTRA_TEXT,
-            Notification.EXTRA_BIG_TEXT,
             Notification.EXTRA_SUB_TEXT,
+            Notification.EXTRA_SUMMARY_TEXT,
         ).mapNotNull { key ->
-            extras.getCharSequence(key)?.toString()?.trim()?.takeIf { it.isNotBlank() }
+            extras.getCharSequence(key)?.toString()?.cleanWhitespace()?.takeIf { it.isNotBlank() }
         }.firstOrNull().orEmpty()
 
-        if (text.isBlank()) {
-            text = try {
-                NotificationCompat.MessagingStyle
-                    .extractMessagingStyleFromNotification(notification)
-                    ?.messages
-                    ?.lastOrNull()
-                    ?.text
-                    ?.toString()
-                    ?.trim()
-                    .orEmpty()
-            } catch (_: Throwable) {
-                ""
-            }
-        }
+        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
+            ?.toString()
+            ?.cleanWhitespace()
+            ?.takeIf { it.isNotBlank() }
+            .orEmpty()
 
-        return title.cleanWhitespace() to text.cleanWhitespace()
+        var text = if (bigText.length > shortText.length) bigText else shortText
+
+        val lastMessage = runCatching {
+            NotificationCompat.MessagingStyle
+                .extractMessagingStyleFromNotification(notification)
+                ?.messages
+                ?.lastOrNull()
+                ?.text
+                ?.toString()
+                ?.cleanWhitespace()
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull().orEmpty()
+
+        // 多条消息的通知（如 QQ 会话累计）时长文本更完整，优先使用
+        if (lastMessage.length > text.length) text = lastMessage
+
+        return title to text
     }
 
-    private fun String.cleanWhitespace(): String = replace(Regex("\\s+"), " ").trim()
+    /** 合并多余空格，但保留换行，长消息在弹幕里仍按原段落换行显示。 */
+    private fun String.cleanWhitespace(): String = replace(Regex("[\\t\\u00A0\\u3000 ]+"), " ")
+        .replace(Regex("\\s*\\n\\s*"), "\n")
+        .trim()
 
     private fun isBlacklisted(content: String, blacklist: String): Boolean {
         if (blacklist.isBlank()) return false
