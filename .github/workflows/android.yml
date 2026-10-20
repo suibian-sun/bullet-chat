@@ -27,12 +27,20 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install SDK packages
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" > /dev/null
+          if [ -z "$ANDROID_HOME" ]; then
+            export ANDROID_HOME=/usr/local/lib/android/sdk
+            echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          fi
+          echo "Using SDK at $ANDROID_HOME"
+          SDKMANAGER=$(find "$ANDROID_HOME" -path "*/cmdline-tools/*/bin/sdkmanager" -type f 2>/dev/null | sort | head -n 1)
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found, using preinstalled SDK"
+            exit 0
+          fi
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" > /dev/null
+          echo "SDK packages ready"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
