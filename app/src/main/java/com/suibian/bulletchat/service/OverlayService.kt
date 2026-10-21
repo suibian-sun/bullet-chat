@@ -30,9 +30,11 @@ import com.suibian.bulletchat.R
 import com.suibian.bulletchat.data.AppSettings
 import com.suibian.bulletchat.data.ChatPackages
 import com.suibian.bulletchat.data.SettingsStore
+import com.suibian.bulletchat.data.StatsStore
 import com.suibian.bulletchat.model.DanmakuMessage
 import com.suibian.bulletchat.ui.DanmakuView
 import com.suibian.bulletchat.util.AppIconLoader
+import com.suibian.bulletchat.util.Permissions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -111,6 +113,8 @@ class OverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         SettingsStore.init(this)
+        StatsStore.init(this)
+        StatsStore.sessionStart()
         settings = SettingsStore.settings.value
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
@@ -175,6 +179,22 @@ class OverlayService : Service() {
 
     private fun dp(value: Int): Int = (value * density).toInt()
 
+    /** Android 8.0 起使用 TYPE_APPLICATION_OVERLAY，更低版本回落到 TYPE_PHONE。 */
+    @Suppress("DEPRECATION")
+    private fun overlayType(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+
+    private fun pendingFlags(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+
     private fun buildLayoutParams(): WindowManager.LayoutParams {
         val screen = screenHeight()
         val height = bandHeight().coerceAtMost(screen)
@@ -194,7 +214,7 @@ class OverlayService : Service() {
         return WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             height,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            overlayType(),
             flags,
             PixelFormat.TRANSLUCENT,
         ).apply {
@@ -205,7 +225,7 @@ class OverlayService : Service() {
 
     private fun attachOverlay() {
         if (danmakuView != null) return
-        if (!Settings.canDrawOverlays(this)) {
+        if (!Permissions.canDrawOverlays(this)) {
             Log.w(TAG, "没有悬浮窗权限")
             return
         }
@@ -296,7 +316,7 @@ class OverlayService : Service() {
                 this,
                 11,
                 Intent(this, MainActivity::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                pendingFlags(),
             ),
         )
         .addAction(
@@ -306,7 +326,7 @@ class OverlayService : Service() {
                 this,
                 12,
                 Intent(this, OverlayService::class.java).setAction(ACTION_STOP),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                pendingFlags(),
             ),
         )
         .build()
@@ -314,7 +334,7 @@ class OverlayService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(NotificationManager::class.java) ?: return
-        val bypassDnd = manager.isNotificationPolicyAccessGranted
+        val bypassDnd = Permissions.hasDndAccess(this)
         val existing = manager.getNotificationChannel(CHANNEL_ID)
         if (existing != null) {
             if (existing.canBypassDnd() == bypassDnd) return
@@ -437,7 +457,7 @@ class OverlayService : Service() {
         } catch (_: Throwable) {
             // 隐藏 API 不可用
         }
-        if (!applied) {
+        if (!applied && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             val dm = resources.displayMetrics
             options.setLaunchBounds(
                 Rect(
@@ -465,6 +485,7 @@ class OverlayService : Service() {
         }
         detachOverlay()
         AppIconLoader.clear()
+        StatsStore.sessionEnd()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }

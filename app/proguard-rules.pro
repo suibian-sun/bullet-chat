@@ -4,6 +4,7 @@
 -keep class com.suibian.bulletchat.service.BootReceiver { *; }
 -keep class com.suibian.bulletchat.MainActivity { *; }
 -keep class com.suibian.bulletchat.AppPickerActivity { *; }
+-keep class com.suibian.bulletchat.ChangelogActivity { *; }
 
 # 设置项枚举通过 valueOf 字符串还原
 -keepclassmembers enum com.suibian.bulletchat.data.DisplayOrientation {

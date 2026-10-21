@@ -1,43 +1,48 @@
 # 弹幕通知 · BulletChat
 
-把微信、QQ 的新消息变成一条条从屏幕上飘过的弹幕。基于 **Kotlin + 原生 View** 编写，通过系统的 **NotificationListenerService** 读取通知，再用 **悬浮窗（TYPE_APPLICATION_OVERLAY）** 绘制弹幕，全程本地处理，不联网、不上传。
+把微信、QQ 的新消息变成一条条从屏幕上飘过的弹幕。基于 **Kotlin + 原生 View** 编写，通过系统的 **NotificationListenerService** 读取通知，再用 **悬浮窗** 绘制弹幕。除了检查更新，全程本地处理，不上传任何通知内容。
 
 ![Android CI](https://github.com/suibian-sun/bullet-chat/actions/workflows/android.yml/badge.svg)
 
+## v1.1.0 新界面
+
+底部三页导航，中间是一个圆形启动按钮：
+
+| 页面 | 内容 |
+| --- | --- |
+| **主页** | 本次运行时长、今日转发、累计转发、累计运行、最近一条弹幕 |
+| **启动** | 中央大号圆形开关，一键启停弹幕；权限状态一览 |
+| **设置** | 通知来源、显示方式、外观与位置、关键词、权限、版本与更新 |
+
+整体采用深色极光背景 + 玻璃拟态卡片 + 青紫渐变的现代美术风格。
+
 ## 功能
 
-- **通知来源可自选**：默认微信 + QQ，点开「通知来源」可搜索并勾选任意已安装应用
-- **位置调节**：弹幕区域距离屏幕顶部 0%–70% 可调，行数 1–8 行
-- **透明度调节**：20%–100% 实时生效
-- **字号 / 速度调节**：12–28sp，50%–250%
-- **显示范围**：全部方向 / 仅竖屏 / 仅横屏，旋转屏幕自动挂载或收起悬浮层
-- **免打扰可用**：申请通知策略权限后，前台通知渠道设置 `bypassDnd`，勿扰模式下仍能显示
-- **点击弹幕打开应用**：可选开启；点击弹幕直接跳到对应会话，并尽量以系统小窗（自由窗口）打开
-- **长内容不截断**：多行自动换行 + 字号自适应 + 整宽重排，长消息完整显示
-- **关键词过滤**：包含指定关键词的消息不显示
-- **智能去重**：过滤群聊汇总与重复通知，避免刷屏
-- **仅亮屏显示**：锁屏、息屏时不打扰
-- **应用图标**：弹幕左侧显示来源 App 图标
-- **开机自启**：重启后自动恢复（需保留权限）
-- **前台服务**：常驻通知栏，随时可停止
-- **隐私安全**：无 `INTERNET` 权限，通知内容只在本机解析
+- **通知来源可自选**：默认微信 + QQ，可搜索并勾选任意已安装应用
+- **长消息单行完整显示**：不换行、不截断，文本超出屏幕时靠滚动逐字露出
+- **位置调节**：弹幕带距屏幕顶部 0%–70%，行数 1–8 行
+- **透明度 / 字号 / 速度**：20%–100%、12–28sp、50%–250%，滑动即时生效
+- **显示范围**：全部方向 / 仅竖屏 / 仅横屏，旋转屏幕自动挂载或收起
+- **免打扰可用**：授予通知策略权限后，前台渠道 `bypassDnd`，勿扰下仍显示
+- **点击弹幕打开应用**：直达对应会话，并尽量以系统小窗（自由窗口）打开
+- **关键词过滤、群聊汇总过滤、重复通知去重、仅亮屏显示**
+- **运行统计**：转发条数按天累计，运行时长跨重启保留
+- **内置更新**：读取 GitHub Releases，有新版本时弹窗提示，可直接下载并调起系统安装器
+- **历史更新**：设置页可查看每个版本的变更记录
+- **开机自启、前台服务保活**
+- **隐私**：通知内容只在本机解析；仅「检查更新」会访问 GitHub API
 
 ## 安装
 
-### 方式一：GitHub Actions 构建产物（推荐）
+### 方式一：GitHub Release（推荐）
 
-1. 打开仓库的 **Actions** 页面，进入最近一次 `Android CI` 运行
-2. 在 **Artifacts** 中下载 `BulletChat-release-apk`
-3. 解压得到 `BulletChat-*.apk`，传到手机安装（需允许「安装未知来源应用」）
+打开 [Releases](https://github.com/suibian-sun/bullet-chat/releases) 下载最新 `BulletChat-v*.apk` 安装。若提示签名冲突，先卸载旧版本。
 
-也可以推送 `v*` 标签（如 `v1.0.1`），工作流会自动创建 Release 并附上 APK：
+### 方式二：Actions 构建产物
 
-```bash
-git tag v1.0.1
-git push origin v1.0.1
-```
+Actions → 最近一次 `Android CI` → Artifacts → `BulletChat-release-apk`。
 
-### 方式二：本地构建
+### 方式三：本地构建
 
 需要 JDK 17 与 Android SDK 35：
 
@@ -47,100 +52,110 @@ export ANDROID_HOME=/path/to/android-sdk
 # 产物：app/build/outputs/apk/release/app-release.apk
 ```
 
-> Release 默认复用 debug 签名，方便直接安装；正式分发请替换为自己的 keystore。
+> Release 复用 debug 签名，方便直接覆盖安装；正式分发请替换为自己的 keystore。
+
+## 系统兼容
+
+- **最低 Android 5.0（API 21）**，覆盖 Android 5.0 → 16，并已在 targetSdk 35 下为后续版本保留兼容路径
+- 各版本差异均做了分支处理：
+
+| 版本区间 | 处理方式 |
+| --- | --- |
+| Android 5.0–7.1 | 悬浮窗使用 `TYPE_PHONE`；无通知渠道概念 |
+| Android 6.0+ | 运行时申请悬浮窗权限；免打扰、电池优化检查启用 |
+| Android 8.0+ | 改用 `TYPE_APPLICATION_OVERLAY`；创建通知渠道；安装 APK 需「未知来源」授权 |
+| Android 10+ | 分区存储、深色系统栏适配 |
+| Android 11+ | 窗口度量改用 `WindowMetrics` |
+| Android 13+ | 运行时申请 `POST_NOTIFICATIONS` |
+| Android 14/15+ | 前台服务声明 `specialUse` 类型；边到边布局 + Insets 适配 |
+
+> 关于「Android 1 到 17」：Android 4.4 及更早系统没有 `NotificationListenerService`（API 18 才引入），无法读取任何应用的通知，因此不存在可用的实现路径；Android 17 尚未正式发布。当前实现以 **API 21 为技术下限**，并在 Android 16/17 上以兼容模式运行。
 
 ## 首次使用
 
-1. 安装并打开「弹幕通知」
-2. **通知使用权** → 去开启 → 在系统列表中找到「弹幕通知」并勾选
-3. **悬浮窗权限** → 去授予 → 允许「显示在其他应用上层」
-4. 建议开启 **后台运行**（忽略电池优化）；若常开勿扰，再授权 **免打扰权限**
-5. 进入「通知来源」，勾选需要弹幕的应用
-6. 打开顶部总开关
-7. 点「发送测试弹幕」确认效果，再去微信 / QQ 收一条消息试试
+1. 打开应用，进入「设置 → 权限」或「启动」页
+2. **通知使用权** → 在系统列表中勾选「弹幕通知」
+3. **悬浮窗权限** → 允许「显示在其他应用上层」
+4. 建议开启 **后台运行**（忽略电池优化）；常开勿扰再授权 **免打扰权限**
+5. 进入「设置 → 通知来源」，勾选需要弹幕的应用
+6. 点底部中间的圆形按钮，或「启动」页的中央按钮
+7. 收一条微信消息验证效果
 
-> 小米 / 红米、OPPO、vivo、realme 等机型还需要在系统设置里允许「后台弹出界面」「自启动」，否则悬浮层可能被系统拦截。
+> 小米 / 红米、华为、OPPO、vivo 等机型还需允许「后台弹出界面」与自启动，否则悬浮层可能被拦截。
 
 ## 调节外观
 
 | 设置项 | 范围 | 说明 |
 | --- | --- | --- |
-| 垂直位置 | 0%–70% | 弹幕区域顶部距屏幕顶部的比例 |
-| 弹幕行数 | 1–8 行 | 同时并排的弹幕轨道数量，行数越多长文本越宽松 |
-| 透明度 | 20%–100% | 整体透明度（背景与文字） |
+| 垂直位置 | 0%–70% | 弹幕带顶部距屏幕顶部的比例 |
+| 弹幕行数 | 1–8 行 | 并行轨道数量 |
+| 透明度 | 20%–100% | 背景与文字整体透明度 |
 | 字号 | 12–28sp | 弹幕文字大小 |
 | 速度 | 50%–250% | 滚动速度，100% 为默认 |
 
-所有调节**即时生效**，不需要重启服务。
+## 更新机制
+
+1. 启动或回到前台时（6 小时内最多一次）请求
+   `https://api.github.com/repos/suibian-sun/bullet-chat/releases/latest`
+2. 用语义化版本比较本地 `versionName`
+3. 有新版则弹出对话框：更新内容 + **关闭** / **立即更新**
+4. 立即更新后显示下载进度条（百分比与已下载大小）
+5. 下载到 `cacheDir/updates/`，经 `FileProvider` 交给系统安装器
+
+设置页「检查更新」可手动触发；「历史更新」是独立页面，展示每个版本的变化。
 
 ## 技术架构
 
 ```
 app/src/main/java/com/suibian/bulletchat/
-├── MainActivity.kt                   # 原生 View 设置界面、权限引导
-├── AppPickerActivity.kt              # 通知来源选择器（搜索 / 多选）
-├── BulletChatApp.kt                  # Application，初始化本地配置
-├── data/AppSettings.kt               # SharedPreferences + StateFlow 配置中心
+├── MainActivity.kt                   # 单 Activity 容器 + 底部导航 + 更新检查
+├── AppPickerActivity.kt              # 通知来源选择器
+├── ChangelogActivity.kt              # 历史更新时间线
+├── data/
+│   ├── AppSettings.kt                # 设置项（SharedPreferences + StateFlow）
+│   ├── StatsStore.kt                 # 运行时长与转发统计
+│   └── Changelog.kt                  # 内置版本历史
 ├── model/DanmakuMessage.kt           # 弹幕数据模型（含 contentIntent）
 ├── service/
-│   ├── BulletNotificationListener.kt # 通知监听、正文提取、过滤、去重
+│   ├── BulletNotificationListener.kt # 通知监听、正文提取、过滤、去重、计数
 │   ├── OverlayService.kt             # 前台服务 + 弹幕带悬浮窗
-│   ├── DanmakuBus.kt                 # 进程内事件通道（SharedFlow）
+│   ├── DanmakuBus.kt                 # 进程内事件通道
 │   └── BootReceiver.kt               # 开机 / 更新后恢复
-├── ui/DanmakuView.kt                 # Canvas 逐帧弹幕引擎（分轨、避让、点击命中）
-├── ui/UiKit.kt                       # 颜色、dp、圆角背景等轻量工具
-└── util/AppIconLoader.kt             # 应用图标加载与 LRU 缓存
+├── ui/
+│   ├── HomePage.kt / LaunchPage.kt / SettingsPage.kt
+│   ├── NavBar.kt                     # 底部导航与圆形启动按钮
+│   ├── DanmakuView.kt                # 单行弹幕引擎（分轨、避让、点击）
+│   └── UiKit.kt                      # 配色、极光背景、玻璃卡片、开关
+├── update/
+│   ├── UpdateChecker.kt              # GitHub Releases 检查与版本比较
+│   ├── UpdateInstaller.kt            # 下载 + FileProvider 安装
+│   └── UpdateDialog.kt               # 更新弹窗与进度条
+└── util/
+    ├── AppIconLoader.kt              # 图标 RGB_565 + LRU
+    └── Permissions.kt                # 各版本权限与系统页跳转
 ```
 
 关键实现：
 
-- **通知读取**：`NotificationListenerService` → `onNotificationPosted`；正文在 `EXTRA_BIG_TEXT` 与 `EXTRA_TEXT` 之间取更长的一份，并兼容 `MessagingStyle`，避免微信长消息只拿到截断文本
-- **弹幕渲染**：自定义 `View` + `Choreographer` 逐帧绘制；`StaticLayout` 多行换行、字号自适应、整宽兜底重排；按轨道分配并做碰撞避让，空闲时自动停止刷新
-- **悬浮层**：窗口高度等于弹幕带高度（而非整屏），`FLAG_NOT_TOUCHABLE` 全屏穿透；开启点击跳转时改用 `FLAG_NOT_TOUCH_MODAL` 只拦截弹幕带内的触摸
-- **点击跳转**：优先透传通知原始 `contentIntent`，直达对应会话；再尝试 `ActivityOptions` 的自由窗口模式，不可用时退回普通启动
-- **显示范围**：监听 `onConfigurationChanged`，按设置挂载或收起悬浮层
-- **免打扰**：`NotificationChannel.setBypassDnd(true)`，需先授予通知策略访问权限
-- **低内存**：不引入 Compose；图标 `RGB_565` + LRU 上限；`onTrimMemory` 时清理图标与弹幕缓存
-- **状态同步**：`StateFlow` 把设置变化实时推给悬浮层，滑动滑块立即看到效果
-- **前台服务**：`foregroundServiceType="specialUse"`，适配 Android 14/15
+- **单行弹幕**：`Paint.measureText` 测量整行宽度，`canvas.drawText` 一次绘制；条目宽度可超过屏幕，靠滚动完整呈现，不做换行与省略
+- **小窗口悬浮层**：窗口高度只等于弹幕带高度，Surface 更小；关闭点击时 `FLAG_NOT_TOUCHABLE` 全透传，开启后改为 `FLAG_NOT_TOUCH_MODAL`
+- **点击跳转**：透传通知原始 `contentIntent`，再尝试 `ActivityOptions` 自由窗口，失败退回普通启动
+- **统计**：`StatsStore` 独立 SharedPreferences，服务启停时累加运行时长，监听服务每转发一条自增
+- **低内存**：无 Compose；图标 `RGB_565` + LRU 上限；`onTrimMemory` 清理缓存
 
 ## 云端构建
 
-`.github/workflows/android.yml` 会在 push 到 `main`、提交 PR 或手动触发时：
-
-1. 准备 JDK 17 与 Android SDK 35
-2. 执行 `./gradlew assembleRelease`
-3. 上传 APK 到 Actions Artifacts
-4. 若推送了 `v*` 标签，自动发布 Release
+`.github/workflows/android.yml` 在 push `main`、`v*` 标签、PR 或手动触发时：安装 JDK 17 与 Android SDK 35 → `./gradlew assembleRelease` → 上传 Artifact；若为标签则自动创建 Release 并附上 APK。
 
 ## 常见问题
 
-**收不到弹幕？**
+**收不到弹幕？** 检查通知使用权、悬浮窗权限、总开关状态，以及「通知来源」是否包含该应用。
 
-- 确认「通知使用权」已勾选（系统设置 → 通知 → 通知使用权）
-- 确认总开关已打开，且「通知来源」里包含该应用
-- 检查微信 / QQ 是否开启了「消息通知」，被折叠的群消息不会产生通知
-- MIUI / ColorOS 需允许「后台弹出界面」，并把应用加入自启动白名单
+**勿扰模式下没有弹幕？** 授权「免打扰权限」后渠道才能绕过勿扰；部分机型另有「勿扰时禁止悬浮窗」开关。
 
-**勿扰模式下没有弹幕？**
+**点击弹幕没进小窗？** 小窗取决于系统是否开放自由窗口，不可用时普通全屏打开。
 
-免打扰只影响通知提示音与横幅，弹幕是悬浮窗，理论上不受影响。若系统连悬浮窗一起限制，请授权「免打扰权限」，让前台通知渠道绕过勿扰，并确认机型没有「勿扰时禁止悬浮窗」的额外开关。
-
-**点击弹幕没进小窗？**
-
-小窗取决于系统是否开放自由窗口能力（部分国产 ROM 已关闭）。不可用时会普通全屏打开对应应用，功能不受影响。
-
-**弹幕挡住操作？**
-
-默认整层不可触摸，不会拦截点击；开启「点击弹幕打开应用」后，仅弹幕带区域会接收触摸，其余区域仍可正常操作。
-
-**会被系统杀掉吗？**
-
-已使用前台服务并申请忽略电池优化；部分 ROM 仍需手动锁定后台任务。
-
-**为什么没有联网权限？**
-
-应用完全离线运行，通知内容不会离开设备。
+**更新下载后无法安装？** 需允许「安装未知应用」；已下载文件在 `cache/updates`，可在提示后重试。
 
 ## License
 

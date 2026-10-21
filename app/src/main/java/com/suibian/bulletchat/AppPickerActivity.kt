@@ -23,7 +23,8 @@ import com.suibian.bulletchat.data.ChatPackages
 import com.suibian.bulletchat.data.SettingsStore
 import com.suibian.bulletchat.ui.Palette
 import com.suibian.bulletchat.ui.dp
-import com.suibian.bulletchat.ui.roundedBackground
+import com.suibian.bulletchat.ui.AuroraDrawable
+import com.suibian.bulletchat.ui.glass
 import com.suibian.bulletchat.ui.textView
 import com.suibian.bulletchat.util.AppIconLoader
 import java.text.Collator
@@ -60,6 +61,7 @@ class AppPickerActivity : Activity() {
 
         window.statusBarColor = Palette.BG
         window.navigationBarColor = Palette.BG
+        window.setBackgroundDrawable(AuroraDrawable())
 
         setContentView(createContentView())
         reloadFilter("")
@@ -74,7 +76,7 @@ class AppPickerActivity : Activity() {
     private fun createContentView(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Palette.BG)
+            background = AuroraDrawable()
         }
 
         // 顶部导航
@@ -111,7 +113,7 @@ class AppPickerActivity : Activity() {
             setTextColor(Palette.TEXT)
             setHintTextColor(0xFF5D6B7C.toInt())
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            background = roundedBackground(Palette.SURFACE_2, 14f)
+            background = glass(14f, 0xFF132030.toInt(), 0x14FFFFFF)
             setPadding(dp(14), dp(11), dp(14), dp(11))
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -142,12 +144,12 @@ class AppPickerActivity : Activity() {
 
         // 列表
         listView = ListView(this).apply {
-            divider = roundedBackground(0x1A2B3949, 0f)
+            divider = glass(0f, 0x1A2B3949, 0x00000000.toInt())
             dividerHeight = dp(1)
             setPadding(dp(8), 0, dp(8), dp(8))
             clipToPadding = false
             isVerticalScrollBarEnabled = false
-            setBackgroundColor(Palette.BG)
+            background = null
         }
         adapter = AppAdapter()
         listView.adapter = adapter
@@ -178,7 +180,7 @@ class AppPickerActivity : Activity() {
 
     private fun chip(label: String, onClick: () -> Unit): TextView = textView(label, 12f, Palette.ACCENT).apply {
         setPadding(dp(12), dp(6), dp(12), dp(6))
-        background = roundedBackground(0x1F5FE3F3, 11f)
+        background = glass(11f, 0x1F5FE3F3, 0x2E5FE3F3)
         isClickable = true
         setOnClickListener { onClick() }
         val lp = LinearLayout.LayoutParams(
@@ -307,7 +309,7 @@ class AppPickerActivity : Activity() {
                     setPadding(dp(10), dp(9), dp(10), dp(9))
                 }
                 val icon = ImageView(this@AppPickerActivity).apply {
-                    background = roundedBackground(0x14FFFFFF, 10f)
+                    background = glass(10f, 0x14FFFFFF, 0x1AFFFFFF)
                     setPadding(dp(3), dp(3), dp(3), dp(3))
                 }
                 row.addView(icon, LinearLayout.LayoutParams(dp(34), dp(34)))

@@ -9,6 +9,7 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.suibian.bulletchat.data.SettingsStore
+import com.suibian.bulletchat.data.StatsStore
 import com.suibian.bulletchat.model.DanmakuMessage
 import com.suibian.bulletchat.util.AppIconLoader
 
@@ -17,6 +18,12 @@ import com.suibian.bulletchat.util.AppIconLoader
  * 不对通知做任何回复或修改，只读取标题与正文。
  */
 class BulletNotificationListener : NotificationListenerService() {
+
+    override fun onCreate() {
+        super.onCreate()
+        SettingsStore.init(this)
+        StatsStore.init(this)
+    }
 
     private val recent = LinkedHashMap<String, Long>()
     private val labelCache = HashMap<String, String>()
@@ -56,6 +63,7 @@ class BulletNotificationListener : NotificationListenerService() {
 
         val appLabel = resolveAppLabel(pkg)
         val icon = if (settings.showAppIcon) AppIconLoader.load(this, pkg, 36) else null
+        StatsStore.recordForwarded(appLabel, title, text)
         DanmakuBus.emit(
             DanmakuMessage(
                 packageName = pkg,

@@ -7,8 +7,6 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
-import android.text.Layout
-import android.text.StaticLayout
 import android.text.TextPaint
 import android.util.AttributeSet
 import android.util.TypedValue
@@ -16,16 +14,15 @@ import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
 import com.suibian.bulletchat.model.DanmakuMessage
-import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
 
 /**
- * 轻量弹幕视图：
- * - 窗口高度即弹幕带高度，避免整屏 Surface 带来的显存占用
- * - StaticLayout 自动换行 + 超长文本自动缩小字号，保证内容完整显示
- * - 支持多行弹幕占多条轨道、点击命中检测
+ * 轻量弹幕视图（单行模式）：
+ * - 每条消息只占一行，不换行；文本超过屏幕宽度时按完整宽度绘制，靠滚动逐字露出
+ * - 窗口高度等于弹幕带高度，Surface 更小、显存更省
+ * - 多轨分配 + 碰撞避让，空闲自动停帧
  */
 class DanmakuView @JvmOverloads constructor(
     context: Context,
@@ -43,13 +40,13 @@ class DanmakuView @JvmOverloads constructor(
 
     private class Item(
         val message: DanmakuMessage,
-        val layout: StaticLayout,
         val paint: TextPaint,
         val icon: Bitmap?,
+        val text: String,
         val width: Float,
         val height: Float,
-        val laneSpan: Int,
         val speed: Float,
+        val baselineOffset: Float,
     ) {
         var lane: Int = 0
         var x: Float = 0f
@@ -109,7 +106,7 @@ class DanmakuView @JvmOverloads constructor(
 
     private fun applyPaints() {
         alpha = (config.alphaPercent.coerceIn(5, 100) / 100f * 255f).toInt()
-        bgPaint.color = Color.argb((alpha * 0.76f).toInt(), 10, 16, 27)
+        bgPaint.color = Color.argb((alpha * 0.78f).toInt(), 8, 14, 24)
         iconPaint.alpha = alpha
         pressedPaint.color = Color.argb((alpha * 0.9f).toInt(), 95, 227, 243)
         items.forEach { it.paint.alpha = alpha }
@@ -138,82 +135,41 @@ class DanmakuView @JvmOverloads constructor(
         val padH = 12f * density
         val padV = 6f * density
         val iconSize = if (icon != null) config.fontSp * spToPx * 1.05f else 0f
-        val iconGap = if (icon != null) 6f * density else 0f
-        val maxBubbleWidth = width * 0.84f
-        val textWidth = (maxBubbleWidth - padH * 2 - iconSize - iconGap)
-            .toInt()
-            .coerceAtLeast((width * 0.3f).toInt())
-        val maxHeight = (height - padV * 2).coerceAtLeast(laneHeight * 0.9f)
+        val iconGap = if (icon != null) 7f * density else 0f
 
-        var fontSize = config.fontSp * spToPx
-        val minFont = 9f * spToPx
-        var layout: StaticLayout
-        var paint: TextPaint
-        val baseAlpha = alpha
-        val text = message.displayText
-
-        while (true) {
-            paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                color = Color.WHITE
-                textSize = fontSize
-                alpha = baseAlpha
-                isSubpixelText = true
-            }
-            layout = buildLayout(text, paint, textWidth)
-            if (layout.height <= maxHeight || fontSize <= minFont) break
-            fontSize -= spToPx
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = Color.WHITE
+            textSize = config.fontSp * spToPx
+            alpha = this@DanmakuView.alpha
+            isSubpixelText = true
         }
 
-        // 缩到最小字号仍然超高：用整屏可用宽度重排，减少行数，避免内容被窗口裁掉
-        var usedWidth = textWidth
-        if (layout.height > maxHeight) {
-            val wide = (width - padH * 2).toInt().coerceAtLeast(textWidth)
-            if (wide > textWidth) {
-                val retry = buildLayout(text, paint, wide)
-                if (retry.lineCount < layout.lineCount) {
-                    layout = retry
-                    usedWidth = wide
-                }
-            }
-        }
+        // 单行文本：宽度按实际像素测量，不换行，也不截断
+        val text = message.displayText.replace('\n', ' ')
+        val textWidth = paint.measureText(text)
+        val metrics = paint.fontMetrics
+        val textHeight = metrics.descent - metrics.ascent
 
-        var lineWidth = 0f
-        for (index in 0 until layout.lineCount) {
-            lineWidth = max(lineWidth, layout.getLineWidth(index))
-        }
-        lineWidth = lineWidth.coerceAtMost(usedWidth.toFloat())
+        val itemHeight = max(textHeight, iconSize) + padV * 2
+        val itemWidth = padH * 2 + iconSize + iconGap + textWidth
 
-        val itemHeight = layout.height + padV * 2
-        val span = min(
-            config.laneCount.coerceIn(1, 8),
-            max(1, ceil((itemHeight / laneHeight).toDouble()).toInt()),
-        )
-        val wantedWidth = padH * 2 + iconSize + iconGap + lineWidth
-        val itemWidth = min(width.toFloat(), wantedWidth)
-        val baseSpeed = 145f * density * (config.speedPercent.coerceIn(30, 300) / 100f)
-        val speed = baseSpeed * (0.9f + Random.nextFloat() * 0.2f)
+        val baseSpeed = 148f * density * (config.speedPercent.coerceIn(30, 300) / 100f)
+        val screenWidth = width.coerceAtLeast(1).toFloat()
+        val overflow = (itemWidth / screenWidth - 1f).coerceIn(0f, 2.5f)
+        val speed = baseSpeed * (1f + overflow * 0.22f) * (0.94f + Random.nextFloat() * 0.12f)
 
         return Item(
             message = message,
-            layout = layout,
             paint = paint,
             icon = icon,
+            text = text,
             width = itemWidth,
             height = itemHeight,
-            laneSpan = span,
             speed = speed,
+            baselineOffset = padV - metrics.ascent,
         )
     }
-
-    private fun buildLayout(text: String, paint: TextPaint, widthPx: Int): StaticLayout =
-        StaticLayout.Builder.obtain(text, 0, text.length, paint, widthPx)
-            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-            .setLineSpacing(0f, 1.08f)
-            .setIncludePad(false)
-            .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
-            .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
-            .build()
 
     private fun enqueue(item: Item) {
         if (assignLane(item)) {
@@ -230,28 +186,17 @@ class DanmakuView @JvmOverloads constructor(
 
     private fun assignLane(item: Item): Boolean {
         if (width <= 0) return false
-        val gap = 24f * density
+        val gap = 26f * density
         val total = laneCount()
-        val span = item.laneSpan.coerceAtMost(total)
 
-        for (start in 0..(total - span)) {
-            var free = true
-            for (lane in start until start + span) {
-                val last = laneLast[lane]
-                if (last != null && last.x + last.width + gap >= width) {
-                    free = false
-                    break
-                }
-            }
-            if (free) {
-                item.lane = start
-                item.x = width.toFloat()
-                item.top = start * laneHeight + (span * laneHeight - item.height) / 2f
-                for (lane in start until start + span) {
-                    laneLast[lane] = item
-                }
-                return true
-            }
+        for (lane in 0 until total) {
+            val last = laneLast[lane]
+            if (last != null && last.x + last.width + gap >= width) continue
+            item.lane = lane
+            item.x = width.toFloat()
+            item.top = lane * laneHeight + (laneHeight - item.height) / 2f
+            laneLast[lane] = item
+            return true
         }
         return false
     }
@@ -259,9 +204,7 @@ class DanmakuView @JvmOverloads constructor(
     private fun removeItem(item: Item) {
         items.remove(item)
         if (pressedItem === item) pressedItem = null
-        for (lane in item.lane until item.lane + item.laneSpan) {
-            if (laneLast[lane] === item) laneLast.remove(lane)
-        }
+        if (laneLast[item.lane] === item) laneLast.remove(item.lane)
     }
 
     private fun step(dt: Float) {
@@ -271,9 +214,7 @@ class DanmakuView @JvmOverloads constructor(
             item.x -= item.speed * dt
             if (item.x + item.width < -8f * density) {
                 iterator.remove()
-                for (lane in item.lane until item.lane + item.laneSpan) {
-                    if (laneLast[lane] === item) laneLast.remove(lane)
-                }
+                if (laneLast[item.lane] === item) laneLast.remove(item.lane)
             }
         }
 
@@ -306,12 +247,10 @@ class DanmakuView @JvmOverloads constructor(
         if (items.isEmpty()) return
 
         val padH = 12f * density
-        val padV = 6f * density
-        val iconGap = 6f * density
 
         for (item in items) {
             rect.set(item.x, item.top, item.x + item.width, item.top + item.height)
-            val radius = min(item.height / 2f, 14f * density)
+            val radius = min(item.height / 2f, 15f * density)
             canvas.drawRoundRect(rect, radius, radius, bgPaint)
             if (item.pressed) {
                 canvas.drawRoundRect(rect, radius, radius, pressedPaint)
@@ -321,20 +260,13 @@ class DanmakuView @JvmOverloads constructor(
             val icon = item.icon
             if (icon != null) {
                 val iconSize = config.fontSp * spToPx * 1.05f
-                iconRect.set(
-                    contentX,
-                    item.top + padV,
-                    contentX + iconSize,
-                    item.top + padV + iconSize,
-                )
+                val iconTop = item.top + (item.height - iconSize) / 2f
+                iconRect.set(contentX, iconTop, contentX + iconSize, iconTop + iconSize)
                 canvas.drawBitmap(icon, null, iconRect, iconPaint)
-                contentX += iconSize + iconGap
+                contentX += iconSize + 7f * density
             }
 
-            canvas.save()
-            canvas.translate(contentX, item.top + padV)
-            item.layout.draw(canvas)
-            canvas.restore()
+            canvas.drawText(item.text, contentX, item.top + item.baselineOffset, item.paint)
         }
     }
 
