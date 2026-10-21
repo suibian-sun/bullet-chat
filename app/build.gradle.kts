@@ -24,8 +24,8 @@ android {
         applicationId = "com.suibian.bulletchat"
         minSdk = 21
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.2.1"
+        versionCode = 8
+        versionName = "1.2.2"
         vectorDrawables {
             useSupportLibrary = true
         }

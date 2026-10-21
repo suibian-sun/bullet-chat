@@ -55,6 +55,7 @@ class OverlayService : Service() {
         private const val TAG = "OverlayService"
         private const val PREFS = "bullet_chat_service"
         private const val KEY_CHANNEL = "active_channel_id"
+        private const val KEY_BYPASS = "channel_bypass_dnd"
         private const val FALLBACK_CHANNEL = "bullet_chat_service_fallback"
         private const val NOTIFICATION_ID = 1001
 
@@ -135,7 +136,6 @@ class OverlayService : Service() {
         startAsForeground()
         registerScreenReceiver()
         observeSettings()
-        observeDanmaku()
 
         if (isOrientationAllowed(settings)) {
             attachOverlay()
@@ -148,6 +148,10 @@ class OverlayService : Service() {
                 SettingsStore.update({ it.copy(enabled = false) })
                 stopSelf()
                 return START_NOT_STICKY
+            }
+            ACTION_START -> {
+                // 服务在跑但悬浮层没挂上（例如权限刚恢复）：补挂一次
+                if (danmakuView == null && settings.enabled) attachOverlay()
             }
             ACTION_TEST -> sendTestDanmaku()
             ACTION_REFRESH -> {
@@ -275,6 +279,7 @@ class OverlayService : Service() {
         try {
             windowManager.addView(view, buildLayoutParams())
             danmakuView = view
+            DanmakuBus.attach(view)
         } catch (t: Throwable) {
             Log.e(TAG, "添加悬浮层失败", t)
         }
@@ -282,6 +287,7 @@ class OverlayService : Service() {
 
     private fun detachOverlay() {
         val view = danmakuView ?: return
+        DanmakuBus.detach(view)
         view.pauseRendering()
         try {
             windowManager.removeView(view)
@@ -319,15 +325,6 @@ class OverlayService : Service() {
                     handler.removeCallbacks(applyLayout)
                     handler.postDelayed(applyLayout, 60L)
                 }
-            }
-        }
-    }
-
-    private fun observeDanmaku() {
-        scope.launch {
-            DanmakuBus.events.collect { message ->
-                // 只做即时投递：视图不在或尚未就绪时直接丢弃，不缓存、不补播
-                danmakuView?.push(message)
             }
         }
     }
@@ -402,9 +399,12 @@ class OverlayService : Service() {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         val savedId = prefs.getString(KEY_CHANNEL, null)
 
-        if (savedId != null) {
-            val existing = manager.getNotificationChannel(savedId)
-            if (existing != null && existing.canBypassDnd() == bypassDnd) return savedId
+        // 以「上次创建渠道时的授权状态」为准。
+        // 不能用 canBypassDnd() 判断：部分 ROM 即使 setBypassDnd(true) 成功也返回 false，
+        // 那样每次刷新都会重建渠道。
+        val savedBypass = prefs.getBoolean(KEY_BYPASS, false)
+        if (savedId != null && savedBypass == bypassDnd) {
+            if (manager.getNotificationChannel(savedId) != null) return savedId
         }
 
         val newId = (if (bypassDnd) "bullet_chat_dnd_" else "bullet_chat_std_") +
@@ -412,7 +412,8 @@ class OverlayService : Service() {
         val channel = NotificationChannel(
             newId,
             getString(R.string.channel_name),
-            NotificationManager.IMPORTANCE_LOW,
+            // DEFAULT：勿扰下更容易被系统放行；无声音、无振动、不弹横幅
+            NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
             description = getString(R.string.channel_desc)
             setShowBadge(false)
@@ -423,12 +424,15 @@ class OverlayService : Service() {
             }
         }
         manager.createNotificationChannel(channel)
-        prefs.edit().putString(KEY_CHANNEL, newId).apply()
+        prefs.edit()
+            .putString(KEY_CHANNEL, newId)
+            .putBoolean(KEY_BYPASS, bypassDnd)
+            .apply()
 
         if (savedId != null && savedId != newId) {
             runCatching { manager.deleteNotificationChannel(savedId) }
         }
-        Log.d(TAG, "通知渠道已重建：$newId（bypassDnd=$bypassDnd）")
+        Log.d(TAG, "通知渠道已就绪：$newId（bypassDnd=$bypassDnd）")
         return newId
     }
 

@@ -2,7 +2,9 @@ package com.suibian.bulletchat.ui
 
 import android.animation.ValueAnimator
 import android.app.Activity
+import android.app.NotificationManager
 import android.content.Context
+import android.os.Build
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
@@ -161,6 +163,7 @@ class LaunchPage(
     private lateinit var todayText: TextView
     private lateinit var totalText: TextView
     private val permissionLabels = ArrayList<TextView>()
+    private lateinit var dndHint: TextView
     private var introPlayed = false
     private lateinit var buttonHolder: FrameLayout
 
@@ -212,16 +215,33 @@ class LaunchPage(
         todayText.text = stats.todayForwarded.toString()
         totalText.text = stats.totalForwarded.toString()
 
+        val dndGranted = Permissions.hasDndAccess(activity)
+        val dndActive = isDndActive()
+        if (dndActive && !dndGranted) {
+            dndHint.text = "系统免打扰已开启：点此授权，避免部分机型把弹幕一起拦掉"
+            dndHint.visibility = View.VISIBLE
+        } else {
+            dndHint.visibility = View.GONE
+        }
+
         val states = listOf(
             Permissions.hasNotificationAccess(activity),
             Permissions.canDrawOverlays(activity),
-            Permissions.hasDndAccess(activity),
+            dndGranted,
         )
         permissionLabels.forEachIndexed { index, label ->
             val granted = states.getOrElse(index) { false }
             label.text = if (granted) "已就绪" else "去开启"
             label.setTextColor(if (granted) Palette.SUCCESS else Palette.WARN)
         }
+    }
+
+    /** 系统是否处于免打扰（API 23+ 才有中断过滤器）。 */
+    private fun isDndActive(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+        val manager = activity.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            ?: return false
+        return manager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
     }
 
     private fun build(): View {
@@ -284,6 +304,14 @@ class LaunchPage(
         root.addView(statusSub)
 
         root.addView(statsStrip(), wrap(top = 22))
+        dndHint = activity.textView("", 11f, Palette.WARN).apply {
+            setPadding(activity.dp(14), activity.dp(11), activity.dp(14), activity.dp(11))
+            background = activity.glass(16f, 0x1AFFC470, 0x33FFC470)
+            visibility = View.GONE
+            isClickable = true
+            setOnClickListener { onPermissionClick(2) }
+        }
+        root.addView(dndHint, wrap(top = 10))
         root.addView(permissionCard(), wrap(top = 12))
         root.addView(hintCard(), wrap(top = 12))
         return scroll

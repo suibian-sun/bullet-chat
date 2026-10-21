@@ -106,9 +106,11 @@ class BulletNotificationListener : NotificationListenerService() {
         )
 
         // 服务被回收时先拉起，本条消息立即投递；投不出去就丢弃，不做延迟补发
-        if (!OverlayService.isRunning) OverlayService.start(this)
-        if (!DanmakuBus.emit(message)) {
+        val delivered = DanmakuBus.emit(message)
+        if (!delivered) {
+            // 没有可用悬浮层：拉起服务（已运行时会尝试补挂），本条不补发
             Log.d(TAG, "悬浮层未就绪，本条消息未投递：$title")
+            OverlayService.start(this)
         }
     }
 

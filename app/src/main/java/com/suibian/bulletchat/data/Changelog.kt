@@ -11,6 +11,18 @@ data class ChangelogEntry(
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
         ChangelogEntry(
+            version = "1.2.2",
+            date = "2026-10-22",
+            title = "修复弹幕不显示与免打扰兼容",
+            highlights = listOf(
+                "修复弹幕不显示：事件通道改为直投视图，去掉协程 Flow 缓冲导致的静默丢弃",
+                "服务在运行但悬浮层未挂上时，收到消息会立即补挂",
+                "免打扰：通知渠道重要性调整为 DEFAULT，并记录授权状态，避免反复重建渠道",
+                "启动页新增「系统免打扰已开启」提示，可直接跳转授权",
+                "仍不显示时可在系统「勿扰 → 允许例外」中把弹幕通知加入白名单",
+            ),
+        ),
+        ChangelogEntry(
             version = "1.2.1",
             date = "2026-10-22",
             title = "弹幕改为纯即时投递",
