@@ -103,7 +103,6 @@ class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var danmakuView: DanmakuView? = null
-    private val buffered = ArrayDeque<DanmakuMessage>()
     private val handler = Handler(Looper.getMainLooper())
     private val applyLayout = Runnable { updateOverlay() }
     private var settings: AppSettings = AppSettings()
@@ -276,7 +275,6 @@ class OverlayService : Service() {
         try {
             windowManager.addView(view, buildLayoutParams())
             danmakuView = view
-            replayBuffered()
         } catch (t: Throwable) {
             Log.e(TAG, "添加悬浮层失败", t)
         }
@@ -327,31 +325,11 @@ class OverlayService : Service() {
 
     private fun observeDanmaku() {
         scope.launch {
-            DanmakuBus.events.collect { message -> dispatch(message) }
+            DanmakuBus.events.collect { message ->
+                // 只做即时投递：视图不在或尚未就绪时直接丢弃，不缓存、不补播
+                danmakuView?.push(message)
+            }
         }
-    }
-
-    /** 视图不在时先缓存，旋转 / 重挂载后补播，避免消息丢失。 */
-    private fun dispatch(message: DanmakuMessage) {
-        val view = danmakuView
-        if (view == null) {
-            cacheMessage(message)
-            return
-        }
-        view.push(message)
-    }
-
-    private fun cacheMessage(message: DanmakuMessage) {
-        if (buffered.size >= 16) buffered.removeFirst()
-        buffered.addLast(message)
-    }
-
-    private fun replayBuffered() {
-        val view = danmakuView ?: return
-        if (buffered.isEmpty()) return
-        val pending = buffered.toList()
-        buffered.clear()
-        pending.forEach { view.push(it) }
     }
 
     private fun startAsForeground() {
@@ -473,6 +451,7 @@ class OverlayService : Service() {
         if (danmakuView == null) {
             attachOverlay()
         }
+        val view = danmakuView ?: return
         val samples = listOf(
             Triple(ChatPackages.WECHAT, "小林", "今晚一起吃饭吗？"),
             Triple(ChatPackages.QQ, "产品群", "新版本已经发到群里了，大家看下"),
@@ -482,23 +461,25 @@ class OverlayService : Service() {
                 "这是一条很长的测试消息，用来确认弹幕不会截断内容，而是自动换行完整显示出来，位置、透明度、字号和速度都可以在设置里调整。",
             ),
         )
-        scope.launch {
-            samples.forEachIndexed { index, (pkg, title, text) ->
-                if (index > 0) delay(420)
-                val label = when (pkg) {
-                    ChatPackages.WECHAT -> "微信"
-                    ChatPackages.QQ -> "QQ"
-                    else -> pkg
+        view.whenReady {
+            scope.launch {
+                samples.forEachIndexed { index, (pkg, title, text) ->
+                    if (index > 0) delay(420)
+                    val label = when (pkg) {
+                        ChatPackages.WECHAT -> "微信"
+                        ChatPackages.QQ -> "QQ"
+                        else -> pkg
+                    }
+                    view.push(
+                        DanmakuMessage(
+                            packageName = pkg,
+                            appLabel = label,
+                            title = title,
+                            text = text,
+                            icon = AppIconLoader.load(this@OverlayService, pkg, 36),
+                        ),
+                    )
                 }
-                dispatch(
-                    DanmakuMessage(
-                        packageName = pkg,
-                        appLabel = label,
-                        title = title,
-                        text = text,
-                        icon = AppIconLoader.load(this@OverlayService, pkg, 36),
-                    ),
-                )
             }
         }
     }

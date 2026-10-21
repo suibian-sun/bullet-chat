@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.os.SystemClock
 import android.text.TextPaint
 import android.util.AttributeSet
 import android.util.TypedValue
@@ -57,6 +58,9 @@ class DanmakuView @JvmOverloads constructor(
 
         /** 0→1 进场淡入，避免整条突然出现 */
         var appear: Float = 0f
+
+        /** 入队时刻，用于丢弃排队过久、已经过时的消息 */
+        val bornAt: Long = SystemClock.elapsedRealtime()
     }
 
     var config: Config = Config()
@@ -67,10 +71,7 @@ class DanmakuView @JvmOverloads constructor(
             isClickable = value.clickable
             applyPaints()
             when {
-                fontChanged -> {
-                    clearAll()
-                    drainPending()
-                }
+                fontChanged -> clearAll()
                 laneChanged -> relayout()
             }
             invalidate()
@@ -109,7 +110,6 @@ class DanmakuView @JvmOverloads constructor(
 
     private val items = ArrayList<Item>(16)
     private val waiting = ArrayList<Item>(8)
-    private val pending = ArrayDeque<DanmakuMessage>()
     private val laneLast = HashMap<Int, Item>()
     private val rect = RectF()
     private val iconRect = RectF()
@@ -121,6 +121,7 @@ class DanmakuView @JvmOverloads constructor(
     private var running = false
     private var lastFrameNs = 0L
     private var pressedItem: Item? = null
+    private var readyAction: (() -> Unit)? = null
 
     init {
         applyPaints()
@@ -138,17 +139,23 @@ class DanmakuView @JvmOverloads constructor(
         pressedPaint.color = Color.argb((alpha * 0.9f).toInt(), 95, 227, 243)
     }
 
+    /**
+     * 立即渲染一条弹幕。
+     * 视图尚未完成布局时直接丢弃——不缓存、不在之后补播。
+     */
     fun push(message: DanmakuMessage) {
-        if (width <= 0 || height <= 0) {
-            if (pending.size >= 20) pending.removeFirst()
-            pending.addLast(message)
-            return
-        }
+        if (width <= 0 || height <= 0) return
         enqueue(buildItem(message))
     }
 
-    /** 当前屏幕上正在飘的弹幕，旋转前用于留存重放。 */
-    fun snapshotMessages(): List<DanmakuMessage> = items.map { it.message }
+    /** 视图可绘制后再执行一次动作（用于测试弹幕，不缓存任何消息）。 */
+    fun whenReady(action: () -> Unit) {
+        if (width > 0 && height > 0) {
+            action()
+        } else {
+            readyAction = action
+        }
+    }
 
     fun clearAll() {
         items.clear()
@@ -257,6 +264,10 @@ class DanmakuView @JvmOverloads constructor(
             }
         }
 
+        // 排队超过 8 秒仍未上轨的消息已过时，直接丢弃，不延后补发
+        val now = SystemClock.elapsedRealtime()
+        waiting.removeAll { now - it.bornAt > 8_000L }
+
         var moved = 0
         while (waiting.isNotEmpty() && moved < 3) {
             val candidate = waiting.first()
@@ -285,15 +296,11 @@ class DanmakuView @JvmOverloads constructor(
         }
 
         laneHeight = newLane
-        drainPending()
-        if (items.isNotEmpty()) startLoop()
-    }
-
-    private fun drainPending() {
-        if (width <= 0 || height <= 0) return
-        while (pending.isNotEmpty()) {
-            enqueue(buildItem(pending.removeFirst()))
+        readyAction?.let {
+            readyAction = null
+            it()
         }
+        if (items.isNotEmpty()) startLoop()
     }
 
     override fun onDraw(canvas: Canvas) {

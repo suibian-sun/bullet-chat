@@ -11,6 +11,18 @@ data class ChangelogEntry(
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
         ChangelogEntry(
+            version = "1.2.1",
+            date = "2026-10-22",
+            title = "弹幕改为纯即时投递",
+            highlights = listOf(
+                "弹幕不再缓存：消息到达立即投递，视图不在或未就绪时直接丢弃",
+                "移除旋转后补播与延迟 800ms 补发，过时消息不会再突然出现",
+                "事件通道取消缓冲队列，没有订阅者即丢弃",
+                "排队超过 8 秒仍未上轨的弹幕自动丢弃",
+                "测试弹幕改为视图就绪后一次性发送",
+            ),
+        ),
+        ChangelogEntry(
             version = "1.2.0",
             date = "2026-10-22",
             title = "过滤修复、实时转发与固定签名",

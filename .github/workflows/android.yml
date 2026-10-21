@@ -62,7 +62,7 @@ jobs:
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             VERSION="${GITHUB_REF_NAME}"
           else
-            VERSION="1.2.0-run${GITHUB_RUN_NUMBER}"
+            VERSION="1.2.1-run${GITHUB_RUN_NUMBER}"
           fi
           cp app/build/outputs/apk/release/app-release.apk "dist/BulletChat-${VERSION}.apk"
           echo "APK: dist/BulletChat-${VERSION}.apk"

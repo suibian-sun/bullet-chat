@@ -161,6 +161,7 @@ app/src/main/java/com/suibian/bulletchat/
 关键实现：
 
 - **单行弹幕**：`Paint.measureText` 测量整行宽度，`canvas.drawText` 一次绘制；条目宽度可超过屏幕，靠滚动完整呈现，不做换行与省略
+- **无缓存投递**：消息到达即投递，悬浮层未就绪时直接丢弃，不做跨帧缓存、延迟补发或旋转后重播
 - **小窗口悬浮层**：窗口高度只等于弹幕带高度，Surface 更小；关闭点击时 `FLAG_NOT_TOUCHABLE` 全透传，开启后改为 `FLAG_NOT_TOUCH_MODAL`
 - **点击跳转**：透传通知原始 `contentIntent`，再尝试 `ActivityOptions` 自由窗口，失败退回普通启动
 - **统计**：`StatsStore` 独立 SharedPreferences，服务启停时累加运行时长，监听服务每转发一条自增

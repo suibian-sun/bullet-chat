@@ -4,8 +4,6 @@ import android.app.Notification
 import android.content.ComponentName
 import android.content.Context
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
@@ -107,15 +105,10 @@ class BulletNotificationListener : NotificationListenerService() {
             contentIntent = notification.contentIntent,
         )
 
-        // 免打扰 / 省电策略下悬浮服务可能已被回收：先拉起，稍等订阅建立后再投递
-        if (!OverlayService.isRunning) {
-            OverlayService.start(this)
-            Handler(Looper.getMainLooper()).postDelayed(
-                { DanmakuBus.emit(message) },
-                800L,
-            )
-        } else {
-            DanmakuBus.emit(message)
+        // 服务被回收时先拉起，本条消息立即投递；投不出去就丢弃，不做延迟补发
+        if (!OverlayService.isRunning) OverlayService.start(this)
+        if (!DanmakuBus.emit(message)) {
+            Log.d(TAG, "悬浮层未就绪，本条消息未投递：$title")
         }
     }
 
