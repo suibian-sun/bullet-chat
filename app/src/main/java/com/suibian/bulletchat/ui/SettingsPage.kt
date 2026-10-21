@@ -228,7 +228,7 @@ class SettingsPage(
             copy(onlyWhenScreenOn = value)
         })
         card.addView(activity.divider())
-        card.addView(switchRow("skipGroup", "过滤群聊汇总", "减少「N 条新消息」这类重复弹幕") { value ->
+        card.addView(switchRow("skipGroup", "过滤群聊汇总", "自动识别「3 条新消息」这类汇总通知") { value ->
             copy(skipGroupSummary = value)
         })
         card.addView(activity.divider())
@@ -356,7 +356,7 @@ class SettingsPage(
     private fun filterCard(): View {
         val card = card()
         card.addView(
-            activity.textView("包含关键词的消息不会显示，多个关键词用逗号分隔。", 11f, Palette.MUTED).apply {
+            activity.textView("包含关键词的消息不会显示；多个关键词用逗号、分号或顿号分隔。", 11f, Palette.MUTED).apply {
                 setPadding(0, activity.dp(11), 0, activity.dp(12))
             },
         )

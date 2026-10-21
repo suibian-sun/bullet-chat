@@ -11,6 +11,20 @@ data class ChangelogEntry(
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
         ChangelogEntry(
+            version = "1.2.0",
+            date = "2026-10-22",
+            title = "过滤修复、实时转发与固定签名",
+            highlights = listOf(
+                "修复「过滤群聊汇总」无效：微信/QQ 的「N 条新消息」不带系统 flag，改为整句文案识别",
+                "横竖屏切换不再重建悬浮层，在屏弹幕按新尺寸重排后继续滚动，不丢消息也不闪屏",
+                "关键词过滤支持逗号、分号、顿号分隔，并缓存解析结果减少开销",
+                "弹幕改为胶囊气泡 + 深色文字描边 + 进场淡入，浅色背景也清晰",
+                "弹幕引擎共用一支画笔、图标缓存下调，降低常驻内存",
+                "拖动外观滑块时对窗口更新做 60ms 节流，避免频繁重排",
+                "发行签名改为仓库内置的固定密钥库，此后所有版本均可覆盖安装",
+            ),
+        ),
+        ChangelogEntry(
             version = "1.1.2",
             date = "2026-10-21",
             title = "导航层级与过渡动画",

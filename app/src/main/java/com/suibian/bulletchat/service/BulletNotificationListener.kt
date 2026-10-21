@@ -50,6 +50,7 @@ class BulletNotificationListener : NotificationListenerService() {
     }
 
     private val recent = LinkedHashMap<String, Long>()
+    private var cachedBlacklist: Pair<String, List<String>>? = null
     private val labelCache = HashMap<String, String>()
 
     override fun onNotificationPosted(sbn: StatusBarNotification?, rankingMap: RankingMap?) {
@@ -73,7 +74,6 @@ class BulletNotificationListener : NotificationListenerService() {
         // 常驻通知（音乐、下载、充电等）不是聊天消息
         if (sbn.isOngoing) return
         if (notification.flags and Notification.FLAG_ONGOING_EVENT != 0) return
-        if (settings.skipGroupSummary && notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
 
         if (settings.onlyWhenScreenOn) {
             val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
@@ -82,7 +82,17 @@ class BulletNotificationListener : NotificationListenerService() {
 
         val (title, text) = extractContent(notification)
         if (title.isBlank() && text.isBlank()) return
-        if (isBlacklisted("$title $text", settings.blacklist)) return
+
+        // 群聊汇总：系统 flag + 文案特征双判定（微信/QQ 的「N 条新消息」不带系统 flag）
+        if (settings.skipGroupSummary && isGroupSummary(notification, title, text)) {
+            Log.d(TAG, "跳过群聊汇总：$title / $text")
+            return
+        }
+
+        if (isBlacklisted(title, text, settings.blacklist)) {
+            Log.d(TAG, "关键词过滤：$title / $text")
+            return
+        }
         if (isDuplicate("$pkg|$title|$text")) return
 
         val appLabel = resolveAppLabel(pkg)
@@ -107,6 +117,21 @@ class BulletNotificationListener : NotificationListenerService() {
         } else {
             DanmakuBus.emit(message)
         }
+    }
+
+    /**
+     * 群聊汇总判定。
+     * FLAG_GROUP_SUMMARY 只覆盖系统折叠出的 summary；微信 / QQ 自己发的
+     * 「3 条新消息」「你收到 5 条新消息」并不带这个 flag，所以还要按文案识别。
+     *
+     * 为避免误伤正常消息，文案规则以「整句匹配」为主，只对极短文本做有限放宽。
+     */
+    private fun isGroupSummary(notification: Notification, title: String, text: String): Boolean {
+        if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return true
+
+        val content = (if (text.isNotBlank()) text else title).trim()
+        if (content.isEmpty() || content.length > 32) return false
+        return SUMMARY_PATTERNS.any { it.matches(content) }
     }
 
     /**
@@ -163,13 +188,23 @@ class BulletNotificationListener : NotificationListenerService() {
         .replace(Regex("\\s*\\n\\s*"), "\n")
         .trim()
 
-    private fun isBlacklisted(content: String, blacklist: String): Boolean {
+    private fun isBlacklisted(title: String, text: String, blacklist: String): Boolean {
         if (blacklist.isBlank()) return false
-        val haystack = content.lowercase()
-        return blacklist
-            .split(Regex("[,，;；\\s]+"))
-            .filter { it.isNotBlank() }
-            .any { haystack.contains(it.lowercase()) }
+        val keywords = parseKeywords(blacklist)
+        if (keywords.isEmpty()) return false
+        val haystack = "$title\n$text".lowercase()
+        return keywords.any { haystack.contains(it) }
+    }
+
+    /** 关键词缓存：设置变化时重新解析，避免每条通知都编译正则。 */
+    private fun parseKeywords(raw: String): List<String> {
+        val cached = cachedBlacklist
+        if (cached != null && cached.first == raw) return cached.second
+        val list = raw.split(Regex("[,，;；、\\n]+"))
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+        cachedBlacklist = raw to list
+        return list
     }
 
     private fun isDuplicate(key: String): Boolean {
@@ -203,5 +238,17 @@ class BulletNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "BulletListener"
+
+        /** 各类 ROM / 应用常见的「汇总」文案；均为整句匹配，避免误杀正常消息。 */
+        private val SUMMARY_PATTERNS = listOf(
+            Regex("^(?:[^:：]{1,10}[:：]\\s*)?\\d+\\s*条(?:新)?消息$"),
+            Regex("^(?:[^:：]{1,10}[:：]\\s*)?\\d+\\s*条未读(?:消息)?$"),
+            Regex("^(?:你(?:收到|有)\\s*)?\\d+\\s*条(?:新)?消息$"),
+            Regex("^\\[\\s*\\d+\\s*条\\s*\\]$"),
+            Regex("^(?:[^:：]{1,10}[:：]\\s*)?\\d+\\s*new messages?$", RegexOption.IGNORE_CASE),
+            Regex("^\\d+\\s*条$"),
+            // 「3条新消息，点击查看」这类带固定后缀的汇总
+            Regex("^.{0,4}\\d+\\s*条新消息(?:\\s*[，,。]?\\s*点击查看)?$"),
+        )
     }
 }

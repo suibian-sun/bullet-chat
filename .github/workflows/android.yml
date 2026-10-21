@@ -50,13 +50,19 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --stacktrace --no-daemon
 
+      - name: Verify signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -n 1)
+          echo "签名证书："
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk | grep -E "DN|SHA-256"
+
       - name: Rename APK
         run: |
           mkdir -p dist
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             VERSION="${GITHUB_REF_NAME}"
           else
-            VERSION="1.1.2-run${GITHUB_RUN_NUMBER}"
+            VERSION="1.2.0-run${GITHUB_RUN_NUMBER}"
           fi
           cp app/build/outputs/apk/release/app-release.apk "dist/BulletChat-${VERSION}.apk"
           echo "APK: dist/BulletChat-${VERSION}.apk"

@@ -23,6 +23,7 @@ import com.suibian.bulletchat.ui.ACCENT_GRADIENT
 import com.suibian.bulletchat.ui.Palette
 import com.suibian.bulletchat.ui.dp
 import com.suibian.bulletchat.ui.glass
+import com.suibian.bulletchat.ui.pressScale
 import com.suibian.bulletchat.ui.textView
 import com.suibian.bulletchat.util.Permissions
 
@@ -166,6 +167,7 @@ class UpdateDialog(
             gravity = Gravity.CENTER
             background = activity.glass(16f, 0xFF152232.toInt(), 0x1FFFFFFF)
             isClickable = true
+            pressScale()
             setOnClickListener { dismiss() }
         }
         actionRow.addView(
@@ -179,6 +181,7 @@ class UpdateDialog(
                 GradientDrawable.Orientation.TL_BR, ACCENT_GRADIENT,
             ).apply { cornerRadius = activity.dp(16).toFloat() }
             isClickable = true
+            pressScale()
             setOnClickListener { startUpdate() }
         }
         actionRow.addView(

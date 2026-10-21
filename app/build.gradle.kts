@@ -1,7 +1,20 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+// 固定发行签名：密钥库随仓库提供，保证本地与 CI 构建出的 APK 使用同一张证书，
+// 从而可以覆盖安装、也能让应用内更新正常安装。
+val keystoreFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystoreFile.exists()) {
+        FileInputStream(keystoreFile).use { load(it) }
+    }
+}
+val hasReleaseKey = keystoreFile.exists()
 
 android {
     namespace = "com.suibian.bulletchat"
@@ -11,10 +24,23 @@ android {
         applicationId = "com.suibian.bulletchat"
         minSdk = 21
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.1.2"
+        versionCode = 6
+        versionName = "1.2.0"
         vectorDrawables {
             useSupportLibrary = true
+        }
+    }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+                enableV1Signing = true
+                enableV2Signing = true
+            }
         }
     }
 
@@ -23,8 +49,12 @@ android {
             isMinifyEnabled = false
         }
         release {
-            // 使用 debug 签名，保证 Release APK 也能直接安装；正式发布请替换为自己的 keystore。
-            signingConfig = signingConfigs.getByName("debug")
+            // 有固定密钥库时使用它；缺失时回退 debug，保证任何环境都能构建
+            signingConfig = if (hasReleaseKey) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

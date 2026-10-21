@@ -21,8 +21,9 @@ import kotlin.random.Random
 /**
  * 轻量弹幕视图（单行模式）：
  * - 每条消息只占一行，不换行；文本超过屏幕宽度时按完整宽度绘制，靠滚动逐字露出
- * - 窗口高度等于弹幕带高度，Surface 更小、显存更省
- * - 多轨分配 + 碰撞避让，空闲自动停帧
+ * - 所有弹幕共用一支 TextPaint，避免每条消息各建一支画笔
+ * - 尺寸变化（横竖屏切换）时保留在屏弹幕并按比例重排，不丢消息也不闪屏
+ * - 空闲自动停帧；文字带深色描边，浅色背景上依然清晰
  */
 class DanmakuView @JvmOverloads constructor(
     context: Context,
@@ -40,31 +41,37 @@ class DanmakuView @JvmOverloads constructor(
 
     private class Item(
         val message: DanmakuMessage,
-        val paint: TextPaint,
         val icon: Bitmap?,
         val text: String,
         val width: Float,
         val height: Float,
         val speed: Float,
         val baselineOffset: Float,
+        val iconSize: Float,
+        val iconGap: Float,
     ) {
         var lane: Int = 0
         var x: Float = 0f
         var top: Float = 0f
         var pressed: Boolean = false
+
+        /** 0→1 进场淡入，避免整条突然出现 */
+        var appear: Float = 0f
     }
 
     var config: Config = Config()
         set(value) {
-            val layoutChanged = field.laneCount != value.laneCount ||
-                field.fontSp != value.fontSp ||
-                field.showAppIcon != value.showAppIcon
+            val fontChanged = field.fontSp != value.fontSp || field.showAppIcon != value.showAppIcon
+            val laneChanged = field.laneCount != value.laneCount
             field = value
             isClickable = value.clickable
             applyPaints()
-            if (layoutChanged) {
-                clearAll()
-                drainPending()
+            when {
+                fontChanged -> {
+                    clearAll()
+                    drainPending()
+                }
+                laneChanged -> relayout()
             }
             invalidate()
         }
@@ -79,13 +86,28 @@ class DanmakuView @JvmOverloads constructor(
     )
 
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1f * density
+    }
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val pressedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 1.6f * density
     }
+    private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        color = Color.WHITE
+        isSubpixelText = true
+    }
+    private val strokePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        color = 0xFF050B14.toInt()
+        style = Paint.Style.STROKE
+        strokeJoin = Paint.Join.ROUND
+    }
 
-    private val items = ArrayList<Item>(12)
+    private val items = ArrayList<Item>(16)
     private val waiting = ArrayList<Item>(8)
     private val pending = ArrayDeque<DanmakuMessage>()
     private val laneLast = HashMap<Int, Item>()
@@ -106,11 +128,14 @@ class DanmakuView @JvmOverloads constructor(
 
     private fun applyPaints() {
         alpha = (config.alphaPercent.coerceIn(5, 100) / 100f * 255f).toInt()
-        bgPaint.color = Color.argb((alpha * 0.78f).toInt(), 8, 14, 24)
+        val textSize = config.fontSp * spToPx
+        textPaint.textSize = textSize
+        textPaint.alpha = alpha
+        strokePaint.textSize = textSize
+        strokePaint.strokeWidth = (textSize * 0.09f).coerceIn(1f, 4f * density)
+        strokePaint.alpha = alpha
         iconPaint.alpha = alpha
         pressedPaint.color = Color.argb((alpha * 0.9f).toInt(), 95, 227, 243)
-        items.forEach { it.paint.alpha = alpha }
-        waiting.forEach { it.paint.alpha = alpha }
     }
 
     fun push(message: DanmakuMessage) {
@@ -140,18 +165,10 @@ class DanmakuView @JvmOverloads constructor(
         val iconSize = if (icon != null) config.fontSp * spToPx * 1.05f else 0f
         val iconGap = if (icon != null) 7f * density else 0f
 
-        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            color = Color.WHITE
-            textSize = config.fontSp * spToPx
-            alpha = this@DanmakuView.alpha
-            isSubpixelText = true
-        }
-
         // 单行文本：宽度按实际像素测量，不换行，也不截断
         val text = message.displayText.replace('\n', ' ')
-        val textWidth = paint.measureText(text)
-        val metrics = paint.fontMetrics
+        val textWidth = textPaint.measureText(text)
+        val metrics = textPaint.fontMetrics
         val textHeight = metrics.descent - metrics.ascent
 
         val itemHeight = max(textHeight, iconSize) + padV * 2
@@ -167,13 +184,14 @@ class DanmakuView @JvmOverloads constructor(
 
         return Item(
             message = message,
-            paint = paint,
             icon = icon,
             text = text,
             width = itemWidth,
             height = itemHeight,
             speed = speed,
             baselineOffset = padV - metrics.ascent,
+            iconSize = iconSize,
+            iconGap = iconGap,
         )
     }
 
@@ -207,6 +225,20 @@ class DanmakuView @JvmOverloads constructor(
         return false
     }
 
+    /** 仅在轨道数变化时重排，不丢弃已显示的弹幕。 */
+    private fun relayout() {
+        val total = laneCount()
+        val newLane = (height.toFloat() / total).coerceAtLeast(1f)
+        laneHeight = newLane
+        laneLast.clear()
+        items.forEach { item ->
+            item.lane = item.lane.coerceIn(0, total - 1)
+            item.top = item.lane * newLane + (newLane - item.height) / 2f
+            laneLast[item.lane] = item
+        }
+        invalidate()
+    }
+
     private fun removeItem(item: Item) {
         items.remove(item)
         if (pressedItem === item) pressedItem = null
@@ -218,6 +250,7 @@ class DanmakuView @JvmOverloads constructor(
         while (iterator.hasNext()) {
             val item = iterator.next()
             item.x -= item.speed * dt
+            if (item.appear < 1f) item.appear = (item.appear + dt * 6f).coerceAtMost(1f)
             if (item.x + item.width < -8f * density) {
                 iterator.remove()
                 if (laneLast[item.lane] === item) laneLast.remove(item.lane)
@@ -236,9 +269,24 @@ class DanmakuView @JvmOverloads constructor(
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        laneHeight = (h.toFloat() / laneCount()).coerceAtLeast(1f)
-        clearAll()
+        val total = laneCount()
+        val newLane = (h.toFloat() / total).coerceAtLeast(1f)
+
+        if (oldw > 0 && oldh > 0 && items.isNotEmpty()) {
+            // 横竖屏切换：按新宽度缩放横向进度，保留正在显示的弹幕
+            val ratio = w.toFloat() / oldw
+            laneLast.clear()
+            items.forEach { item ->
+                item.x = (item.x * ratio).coerceAtLeast(-item.width)
+                item.lane = item.lane.coerceIn(0, total - 1)
+                item.top = item.lane * newLane + (newLane - item.height) / 2f
+                laneLast[item.lane] = item
+            }
+        }
+
+        laneHeight = newLane
         drainPending()
+        if (items.isNotEmpty()) startLoop()
     }
 
     private fun drainPending() {
@@ -252,27 +300,39 @@ class DanmakuView @JvmOverloads constructor(
         super.onDraw(canvas)
         if (items.isEmpty()) return
 
-        val padH = 12f * density
-
         for (item in items) {
+            val itemAlpha = (alpha * item.appear).toInt().coerceIn(0, 255)
+            if (itemAlpha <= 0) continue
+
             rect.set(item.x, item.top, item.x + item.width, item.top + item.height)
-            val radius = min(item.height / 2f, 15f * density)
+            val radius = item.height / 2f
+
+            bgPaint.color = Color.argb((itemAlpha * 0.80f).toInt(), 7, 13, 22)
             canvas.drawRoundRect(rect, radius, radius, bgPaint)
+
+            borderPaint.color = Color.argb((itemAlpha * 0.14f).toInt(), 255, 255, 255)
+            canvas.drawRoundRect(rect, radius, radius, borderPaint)
+
             if (item.pressed) {
                 canvas.drawRoundRect(rect, radius, radius, pressedPaint)
             }
 
-            var contentX = item.x + padH
+            var contentX = item.x + 12f * density
             val icon = item.icon
             if (icon != null) {
-                val iconSize = config.fontSp * spToPx * 1.05f
-                val iconTop = item.top + (item.height - iconSize) / 2f
-                iconRect.set(contentX, iconTop, contentX + iconSize, iconTop + iconSize)
+                val iconTop = item.top + (item.height - item.iconSize) / 2f
+                iconRect.set(contentX, iconTop, contentX + item.iconSize, iconTop + item.iconSize)
+                iconPaint.alpha = itemAlpha
                 canvas.drawBitmap(icon, null, iconRect, iconPaint)
-                contentX += iconSize + 7f * density
+                contentX += item.iconSize + item.iconGap
             }
 
-            canvas.drawText(item.text, contentX, item.top + item.baselineOffset, item.paint)
+            val baseline = item.top + item.baselineOffset
+            textPaint.alpha = itemAlpha
+            strokePaint.alpha = itemAlpha
+            // 先描边再填充，浅色背景上也能看清
+            canvas.drawText(item.text, contentX, baseline, strokePaint)
+            canvas.drawText(item.text, contentX, baseline, textPaint)
         }
     }
 

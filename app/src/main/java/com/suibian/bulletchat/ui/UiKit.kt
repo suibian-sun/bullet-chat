@@ -19,6 +19,7 @@ import android.graphics.drawable.RippleDrawable
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
@@ -349,4 +350,17 @@ fun View.pulse() {
             animate().scaleX(1f).scaleY(1f).setDuration(180L).start()
         }
         .start()
+}
+
+/** 轻量按压缩放反馈，不影响原有的点击事件。 */
+fun View.pressScale(target: Float = 0.96f) {
+    setOnTouchListener { view, event ->
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN ->
+                view.animate().scaleX(target).scaleY(target).setDuration(80L).start()
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                view.animate().scaleX(1f).scaleY(1f).setDuration(140L).start()
+        }
+        false
+    }
 }

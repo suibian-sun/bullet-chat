@@ -10,7 +10,7 @@ import android.graphics.PorterDuff
  * 应用图标加载器：小尺寸、RGB_565、LRU 上限，避免大量图标占用内存。
  */
 object AppIconLoader {
-    private const val MAX_CACHE = 96
+    private const val MAX_CACHE = 48
     private val cache = object : LinkedHashMap<String, Bitmap?>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap?>?): Boolean =
             size > MAX_CACHE

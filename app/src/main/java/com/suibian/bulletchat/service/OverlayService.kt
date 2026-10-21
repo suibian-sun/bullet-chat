@@ -104,6 +104,8 @@ class OverlayService : Service() {
     private lateinit var windowManager: WindowManager
     private var danmakuView: DanmakuView? = null
     private val buffered = ArrayDeque<DanmakuMessage>()
+    private val handler = Handler(Looper.getMainLooper())
+    private val applyLayout = Runnable { updateOverlay() }
     private var settings: AppSettings = AppSettings()
     private var receiverRegistered = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -160,14 +162,21 @@ class OverlayService : Service() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         settings = SettingsStore.settings.value
+        if (!settings.enabled) return
 
-        // 旋转前把正在飘的弹幕留存，重挂载后重新播放，避免横竖屏切换时消息凭空消失
-        danmakuView?.snapshotMessages()?.takeLast(8)?.forEach { cacheMessage(it) }
-
-        detachOverlay()
         // 注意：这里必须用 newConfig 的方向，resources.configuration 可能仍是旧值
-        if (settings.enabled && settings.displayOrientation.matches(newConfig.orientation)) {
+        if (!settings.displayOrientation.matches(newConfig.orientation)) {
+            detachOverlay()
+            return
+        }
+
+        if (danmakuView == null) {
             attachOverlay(newConfig.orientation)
+        } else {
+            // 保留视图，只更新窗口尺寸/位置；DanmakuView 会按新尺寸重排已有弹幕
+            updateOverlay()
+            // 个别 ROM 在回调时刻仍返回旧度量，稍后再校正一次
+            handler.postDelayed({ updateOverlay() }, 150L)
         }
     }
 
@@ -306,7 +315,12 @@ class OverlayService : Service() {
                     detachOverlay()
                     return@collect
                 }
-                if (danmakuView == null) attachOverlay() else updateOverlay()
+                if (danmakuView == null) {
+                    attachOverlay()
+                } else {
+                    handler.removeCallbacks(applyLayout)
+                    handler.postDelayed(applyLayout, 60L)
+                }
             }
         }
     }
@@ -328,7 +342,7 @@ class OverlayService : Service() {
     }
 
     private fun cacheMessage(message: DanmakuMessage) {
-        if (buffered.size >= 8) buffered.removeFirst()
+        if (buffered.size >= 16) buffered.removeFirst()
         buffered.addLast(message)
     }
 
@@ -555,6 +569,7 @@ class OverlayService : Service() {
         // 用户主动停止时会先把 enabled 置 false；仍为 true 说明是系统回收，需要自动拉起
         val shouldRestart = SettingsStore.settings.value.enabled
         isRunning = false
+        handler.removeCallbacksAndMessages(null)
         scope.cancel()
         if (receiverRegistered) {
             try {
