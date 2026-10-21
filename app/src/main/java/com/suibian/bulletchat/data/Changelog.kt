@@ -11,6 +11,20 @@ data class ChangelogEntry(
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
         ChangelogEntry(
+            version = "1.1.1",
+            date = "2026-10-21",
+            title = "横屏与免打扰修复",
+            highlights = listOf(
+                "修复横屏下弹幕带位置与尺寸未重算，导致部分消息不可见",
+                "横竖屏切换时保留正在显示的消息，重挂载后重新播放",
+                "弹幕速度改为恒定时长模型，横屏不再长期占用轨道挤掉后续消息",
+                "修复免打扰下不显示：按授权状态重建独立渠道，确保 bypassDnd 真正生效",
+                "服务被免打扰 / 省电策略回收后自动恢复，收到新消息时自愈",
+                "前台服务启动失败时自动回退兼容模式",
+                "弹幕带高度在横屏下限制为屏幕 62%，避免挤压顶部内容",
+            ),
+        ),
+        ChangelogEntry(
             version = "1.1.0",
             date = "2026-10-21",
             title = "全新界面与更新能力",

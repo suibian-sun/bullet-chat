@@ -115,12 +115,15 @@ class DanmakuView @JvmOverloads constructor(
 
     fun push(message: DanmakuMessage) {
         if (width <= 0 || height <= 0) {
-            if (pending.size >= 12) pending.removeFirst()
+            if (pending.size >= 20) pending.removeFirst()
             pending.addLast(message)
             return
         }
         enqueue(buildItem(message))
     }
+
+    /** 当前屏幕上正在飘的弹幕，旋转前用于留存重放。 */
+    fun snapshotMessages(): List<DanmakuMessage> = items.map { it.message }
 
     fun clearAll() {
         items.clear()
@@ -154,10 +157,13 @@ class DanmakuView @JvmOverloads constructor(
         val itemHeight = max(textHeight, iconSize) + padV * 2
         val itemWidth = padH * 2 + iconSize + iconGap + textWidth
 
-        val baseSpeed = 148f * density * (config.speedPercent.coerceIn(30, 300) / 100f)
+        // 以「穿越屏幕所需时长」为基准：竖屏、横屏、超长文本的观感一致，
+        // 横屏时不会因为移动距离变长而长期占用轨道、把后续消息挤掉。
         val screenWidth = width.coerceAtLeast(1).toFloat()
+        val speedFactor = config.speedPercent.coerceIn(30, 300) / 100f
         val overflow = (itemWidth / screenWidth - 1f).coerceIn(0f, 2.5f)
-        val speed = baseSpeed * (1f + overflow * 0.22f) * (0.94f + Random.nextFloat() * 0.12f)
+        val seconds = (7.4f / speedFactor) * (1f + overflow * 0.10f)
+        val speed = (screenWidth + itemWidth) / seconds * (0.96f + Random.nextFloat() * 0.08f)
 
         return Item(
             message = message,
@@ -175,7 +181,7 @@ class DanmakuView @JvmOverloads constructor(
         if (assignLane(item)) {
             items.add(item)
         } else {
-            if (waiting.size >= 12) waiting.removeAt(0)
+            if (waiting.size >= 24) waiting.removeAt(0)
             waiting.add(item)
         }
         startLoop()

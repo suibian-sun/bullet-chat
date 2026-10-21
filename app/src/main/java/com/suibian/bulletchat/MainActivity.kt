@@ -112,6 +112,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshAll()
+        if (SettingsStore.settings.value.enabled) OverlayService.refreshChannel(this)
         if (current == 0) home.onVisible()
         if (UpdateChecker.shouldAutoCheck()) {
             checkUpdate(manual = false)

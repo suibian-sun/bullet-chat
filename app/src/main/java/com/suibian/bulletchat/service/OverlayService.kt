@@ -16,7 +16,9 @@ import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.util.TypedValue
@@ -51,8 +53,14 @@ class OverlayService : Service() {
 
     companion object {
         private const val TAG = "OverlayService"
-        private const val CHANNEL_ID = "bullet_chat_overlay"
+        private const val PREFS = "bullet_chat_service"
+        private const val KEY_CHANNEL = "active_channel_id"
+        private const val FALLBACK_CHANNEL = "bullet_chat_service_fallback"
         private const val NOTIFICATION_ID = 1001
+
+        @Volatile
+        var isRunning: Boolean = false
+            private set
 
         const val ACTION_START = "com.suibian.bulletchat.action.START"
         const val ACTION_STOP = "com.suibian.bulletchat.action.STOP"
@@ -81,7 +89,9 @@ class OverlayService : Service() {
             }
         }
 
+        /** 权限变化后重建渠道；服务未运行时不做任何事，避免把服务拉起来。 */
         fun refreshChannel(context: Context) {
+            if (!isRunning) return
             val intent = Intent(context, OverlayService::class.java).setAction(ACTION_REFRESH)
             try {
                 context.startService(intent)
@@ -93,6 +103,7 @@ class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var danmakuView: DanmakuView? = null
+    private val buffered = ArrayDeque<DanmakuMessage>()
     private var settings: AppSettings = AppSettings()
     private var receiverRegistered = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -115,6 +126,7 @@ class OverlayService : Service() {
         SettingsStore.init(this)
         StatsStore.init(this)
         StatsStore.sessionStart()
+        isRunning = true
         settings = SettingsStore.settings.value
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
@@ -137,7 +149,10 @@ class OverlayService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_TEST -> sendTestDanmaku()
-            ACTION_REFRESH -> createNotificationChannel()
+            ACTION_REFRESH -> {
+                createNotificationChannel()
+                startAsForeground()
+            }
         }
         return START_STICKY
     }
@@ -145,9 +160,14 @@ class OverlayService : Service() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         settings = SettingsStore.settings.value
+
+        // 旋转前把正在飘的弹幕留存，重挂载后重新播放，避免横竖屏切换时消息凭空消失
+        danmakuView?.snapshotMessages()?.takeLast(8)?.forEach { cacheMessage(it) }
+
         detachOverlay()
-        if (settings.enabled && isOrientationAllowed(settings)) {
-            attachOverlay()
+        // 注意：这里必须用 newConfig 的方向，resources.configuration 可能仍是旧值
+        if (settings.enabled && settings.displayOrientation.matches(newConfig.orientation)) {
+            attachOverlay(newConfig.orientation)
         }
     }
 
@@ -172,9 +192,17 @@ class OverlayService : Service() {
             resources.displayMetrics.heightPixels
         }
 
+    /** 弹幕带最多占屏幕 62%；屏幕矮（横屏）时自动减少有效轨道，避免行高被压到文字重叠。 */
+    private fun effectiveLanes(): Int {
+        val lanePx = (settings.fontSp * spToPx * 1.55f).coerceAtLeast(1f)
+        val maxBand = (screenHeight() * 0.62f).coerceAtLeast(dp(40).toFloat())
+        val maxLanes = (maxBand / lanePx).toInt().coerceIn(1, 8)
+        return settings.laneCount.coerceIn(1, 8).coerceAtMost(maxLanes)
+    }
+
     private fun bandHeight(): Int {
-        val laneHeight = settings.fontSp * spToPx * 1.55f
-        return (laneHeight * settings.laneCount.coerceIn(1, 8)).toInt().coerceAtLeast(dp(32))
+        val lanePx = settings.fontSp * spToPx * 1.55f
+        return (lanePx * effectiveLanes()).toInt().coerceAtLeast(dp(32))
     }
 
     private fun dp(value: Int): Int = (value * density).toInt()
@@ -223,13 +251,14 @@ class OverlayService : Service() {
         }
     }
 
-    private fun attachOverlay() {
+    private fun attachOverlay(orientationOverride: Int? = null) {
         if (danmakuView != null) return
         if (!Permissions.canDrawOverlays(this)) {
             Log.w(TAG, "没有悬浮窗权限")
             return
         }
-        if (!isOrientationAllowed(settings)) return
+        val orientation = orientationOverride ?: resources.configuration.orientation
+        if (!settings.displayOrientation.matches(orientation)) return
 
         val view = DanmakuView(this).apply {
             config = settings.toConfig()
@@ -238,6 +267,7 @@ class OverlayService : Service() {
         try {
             windowManager.addView(view, buildLayoutParams())
             danmakuView = view
+            replayBuffered()
         } catch (t: Throwable) {
             Log.e(TAG, "添加悬浮层失败", t)
         }
@@ -283,11 +313,31 @@ class OverlayService : Service() {
 
     private fun observeDanmaku() {
         scope.launch {
-            DanmakuBus.events.collect { message ->
-                val view = danmakuView ?: return@collect
-                view.push(message)
-            }
+            DanmakuBus.events.collect { message -> dispatch(message) }
         }
+    }
+
+    /** 视图不在时先缓存，旋转 / 重挂载后补播，避免消息丢失。 */
+    private fun dispatch(message: DanmakuMessage) {
+        val view = danmakuView
+        if (view == null) {
+            cacheMessage(message)
+            return
+        }
+        view.push(message)
+    }
+
+    private fun cacheMessage(message: DanmakuMessage) {
+        if (buffered.size >= 8) buffered.removeFirst()
+        buffered.addLast(message)
+    }
+
+    private fun replayBuffered() {
+        val view = danmakuView ?: return
+        if (buffered.isEmpty()) return
+        val pending = buffered.toList()
+        buffered.clear()
+        pending.forEach { view.push(it) }
     }
 
     private fun startAsForeground() {
@@ -299,11 +349,16 @@ class OverlayService : Service() {
         try {
             ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), type)
         } catch (t: Throwable) {
-            Log.e(TAG, "startForeground 失败", t)
+            Log.e(TAG, "startForeground 失败，尝试无类型启动", t)
+            try {
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), 0)
+            } catch (t2: Throwable) {
+                Log.e(TAG, "startForeground 仍然失败", t2)
+            }
         }
     }
 
-    private fun buildNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
+    private fun buildNotification() = NotificationCompat.Builder(this, currentChannelId())
         .setSmallIcon(R.drawable.ic_notification)
         .setContentTitle("弹幕通知运行中")
         .setContentText("微信 / QQ 等应用的新消息将以弹幕显示")
@@ -331,18 +386,39 @@ class OverlayService : Service() {
         )
         .build()
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = getSystemService(NotificationManager::class.java) ?: return
-        val bypassDnd = Permissions.hasDndAccess(this)
-        val existing = manager.getNotificationChannel(CHANNEL_ID)
-        if (existing != null) {
-            if (existing.canBypassDnd() == bypassDnd) return
-            manager.deleteNotificationChannel(CHANNEL_ID)
+    private fun currentChannelId(): String =
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            FALLBACK_CHANNEL
+        } else {
+            getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_CHANNEL, FALLBACK_CHANNEL)
+                ?: FALLBACK_CHANNEL
         }
 
+    /**
+     * 免打扰状态下，前台通知必须能绕过勿扰，否则部分 ROM 会把服务当作不可见后台服务限制。
+     *
+     * 注意：Android 的渠道重要性 / bypassDnd 一旦创建就不可修改，且「删除后用同名 ID 重建」
+     * 会继承旧渠道的设置。因此这里按「是否已授权免打扰」生成一个全新的渠道 ID，
+     * 授权状态变化时创建新渠道并删除旧的，确保 bypassDnd 真正生效。
+     */
+    private fun createNotificationChannel(): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return FALLBACK_CHANNEL
+
+        val manager = getSystemService(NotificationManager::class.java)
+            ?: return FALLBACK_CHANNEL
+        val bypassDnd = Permissions.hasDndAccess(this)
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val savedId = prefs.getString(KEY_CHANNEL, null)
+
+        if (savedId != null) {
+            val existing = manager.getNotificationChannel(savedId)
+            if (existing != null && existing.canBypassDnd() == bypassDnd) return savedId
+        }
+
+        val newId = (if (bypassDnd) "bullet_chat_dnd_" else "bullet_chat_std_") +
+            System.currentTimeMillis()
         val channel = NotificationChannel(
-            CHANNEL_ID,
+            newId,
             getString(R.string.channel_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
@@ -351,14 +427,17 @@ class OverlayService : Service() {
             enableVibration(false)
             setSound(null, null)
             if (bypassDnd) {
-                try {
-                    setBypassDnd(true)
-                } catch (_: Throwable) {
-                    // 部分 ROM 不允许应用修改
-                }
+                runCatching { setBypassDnd(true) }
             }
         }
         manager.createNotificationChannel(channel)
+        prefs.edit().putString(KEY_CHANNEL, newId).apply()
+
+        if (savedId != null && savedId != newId) {
+            runCatching { manager.deleteNotificationChannel(savedId) }
+        }
+        Log.d(TAG, "通知渠道已重建：$newId（bypassDnd=$bypassDnd）")
+        return newId
     }
 
     private fun registerScreenReceiver() {
@@ -380,7 +459,6 @@ class OverlayService : Service() {
         if (danmakuView == null) {
             attachOverlay()
         }
-        val view = danmakuView ?: return
         val samples = listOf(
             Triple(ChatPackages.WECHAT, "小林", "今晚一起吃饭吗？"),
             Triple(ChatPackages.QQ, "产品群", "新版本已经发到群里了，大家看下"),
@@ -398,7 +476,7 @@ class OverlayService : Service() {
                     ChatPackages.QQ -> "QQ"
                     else -> pkg
                 }
-                view.push(
+                dispatch(
                     DanmakuMessage(
                         packageName = pkg,
                         appLabel = label,
@@ -474,6 +552,9 @@ class OverlayService : Service() {
     }
 
     override fun onDestroy() {
+        // 用户主动停止时会先把 enabled 置 false；仍为 true 说明是系统回收，需要自动拉起
+        val shouldRestart = SettingsStore.settings.value.enabled
+        isRunning = false
         scope.cancel()
         if (receiverRegistered) {
             try {
@@ -488,10 +569,19 @@ class OverlayService : Service() {
         StatsStore.sessionEnd()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         super.onDestroy()
+
+        if (shouldRestart) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (SettingsStore.settings.value.enabled && !isRunning) {
+                    Log.w(TAG, "服务被系统回收，尝试自动恢复")
+                    start(this)
+                }
+            }, 1500L)
+        }
     }
 
     private fun AppSettings.toConfig() = DanmakuView.Config(
-        laneCount = laneCount,
+        laneCount = effectiveLanes(),
         alphaPercent = alphaPercent,
         fontSp = fontSp,
         speedPercent = speedPercent,

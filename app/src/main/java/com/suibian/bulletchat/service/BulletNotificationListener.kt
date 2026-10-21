@@ -1,7 +1,11 @@
 package com.suibian.bulletchat.service
 
 import android.app.Notification
+import android.content.ComponentName
 import android.content.Context
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
@@ -23,6 +27,26 @@ class BulletNotificationListener : NotificationListenerService() {
         super.onCreate()
         SettingsStore.init(this)
         StatsStore.init(this)
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        SettingsStore.init(this)
+        StatsStore.init(this)
+        // 部分 ROM 在勿扰 / 省电时回收前台服务，这里用常驻的通知监听把弹幕服务拉回来
+        if (SettingsStore.settings.value.enabled && !OverlayService.isRunning) {
+            Log.w(TAG, "弹幕服务未运行，尝试恢复")
+            OverlayService.start(this)
+        }
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            runCatching {
+                requestRebind(ComponentName(this, BulletNotificationListener::class.java))
+            }
+        }
     }
 
     private val recent = LinkedHashMap<String, Long>()
@@ -64,16 +88,25 @@ class BulletNotificationListener : NotificationListenerService() {
         val appLabel = resolveAppLabel(pkg)
         val icon = if (settings.showAppIcon) AppIconLoader.load(this, pkg, 36) else null
         StatsStore.recordForwarded(appLabel, title, text)
-        DanmakuBus.emit(
-            DanmakuMessage(
-                packageName = pkg,
-                appLabel = appLabel,
-                title = title,
-                text = text,
-                icon = icon,
-                contentIntent = notification.contentIntent,
-            ),
+        val message = DanmakuMessage(
+            packageName = pkg,
+            appLabel = appLabel,
+            title = title,
+            text = text,
+            icon = icon,
+            contentIntent = notification.contentIntent,
         )
+
+        // 免打扰 / 省电策略下悬浮服务可能已被回收：先拉起，稍等订阅建立后再投递
+        if (!OverlayService.isRunning) {
+            OverlayService.start(this)
+            Handler(Looper.getMainLooper()).postDelayed(
+                { DanmakuBus.emit(message) },
+                800L,
+            )
+        } else {
+            DanmakuBus.emit(message)
+        }
     }
 
     /**
