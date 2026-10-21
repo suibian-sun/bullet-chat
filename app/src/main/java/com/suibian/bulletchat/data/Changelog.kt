@@ -11,6 +11,16 @@ data class ChangelogEntry(
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
         ChangelogEntry(
+            version = "1.2.3",
+            date = "2026-10-22",
+            title = "修复弹幕卡片被裁切",
+            highlights = listOf(
+                "修复弹幕胶囊高度超过轨道、被窗口上下裁切与相邻行重叠的问题",
+                "弹幕带高度改为按胶囊实际高度计算（文字行高 + 内边距 + 轨道间隙）",
+                "启动页补回「发送测试弹幕」按钮，未开启或缺少悬浮窗权限时给出提示",
+            ),
+        ),
+        ChangelogEntry(
             version = "1.2.2",
             date = "2026-10-22",
             title = "修复弹幕不显示与免打扰兼容",

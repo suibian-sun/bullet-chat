@@ -66,6 +66,7 @@ class MainActivity : Activity() {
             activity = this,
             onToggle = { toggleService() },
             onPermissionClick = { openPermission(it) },
+            onTest = { sendTestDanmaku() },
         )
         settings = SettingsPage(
             activity = this,
@@ -263,6 +264,20 @@ class MainActivity : Activity() {
         OverlayService.start(this)
         refreshAll()
         toast("弹幕已开启")
+    }
+
+    private fun sendTestDanmaku() {
+        if (!SettingsStore.settings.value.enabled) {
+            toast("请先开启弹幕，再发送测试")
+            return
+        }
+        if (!Permissions.canDrawOverlays(this)) {
+            toast("请先授予悬浮窗权限")
+            Permissions.openOverlaySettings(this)
+            return
+        }
+        OverlayService.sendTest(this)
+        toast("正在发送测试弹幕")
     }
 
     private fun openPermission(index: Int) {

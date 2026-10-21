@@ -204,18 +204,24 @@ class OverlayService : Service() {
             resources.displayMetrics.heightPixels
         }
 
-    /** 弹幕带最多占屏幕 62%；屏幕矮（横屏）时自动减少有效轨道，避免行高被压到文字重叠。 */
+    /**
+     * 单条弹幕的完整高度：文字行高 + 上下内边距（6dp×2）+ 轨道间隙（6dp）。
+     * 必须与 DanmakuView 里胶囊的实际高度一致，否则气泡会超出轨道、被窗口裁切或互相重叠。
+     */
+    private fun lanePx(): Float {
+        val textHeight = settings.fontSp * spToPx * 1.25f
+        return textHeight + dp(12).toFloat() + dp(6).toFloat()
+    }
+
+    /** 弹幕带最多占屏幕 62%；屏幕矮（横屏）时自动减少有效轨道。 */
     private fun effectiveLanes(): Int {
-        val lanePx = (settings.fontSp * spToPx * 1.55f).coerceAtLeast(1f)
         val maxBand = (screenHeight() * 0.62f).coerceAtLeast(dp(40).toFloat())
-        val maxLanes = (maxBand / lanePx).toInt().coerceIn(1, 8)
+        val maxLanes = (maxBand / lanePx()).toInt().coerceIn(1, 8)
         return settings.laneCount.coerceIn(1, 8).coerceAtMost(maxLanes)
     }
 
-    private fun bandHeight(): Int {
-        val lanePx = settings.fontSp * spToPx * 1.55f
-        return (lanePx * effectiveLanes()).toInt().coerceAtLeast(dp(32))
-    }
+    private fun bandHeight(): Int =
+        (lanePx() * effectiveLanes()).toInt().coerceAtLeast(dp(40))
 
     private fun dp(value: Int): Int = (value * density).toInt()
 

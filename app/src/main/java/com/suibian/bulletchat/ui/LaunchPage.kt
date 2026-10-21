@@ -153,6 +153,7 @@ class LaunchPage(
     private val activity: Activity,
     private val onToggle: () -> Unit,
     private val onPermissionClick: (Int) -> Unit,
+    private val onTest: () -> Unit,
 ) {
 
     val view: View
@@ -312,6 +313,7 @@ class LaunchPage(
             setOnClickListener { onPermissionClick(2) }
         }
         root.addView(dndHint, wrap(top = 10))
+        root.addView(testButton(), wrap(top = 12))
         root.addView(permissionCard(), wrap(top = 12))
         root.addView(hintCard(), wrap(top = 12))
         return scroll
@@ -358,6 +360,33 @@ class LaunchPage(
             },
         )
         row.addView(right, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        return row
+    }
+
+    /** 发送测试弹幕：胶囊按钮，点击后由服务侧发三条示例。 */
+    private fun testButton(): View {
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            background = activity.glass(16f, 0x1F5FE3F3, 0x335FE3F3)
+            isClickable = true
+            pressScale(0.97f)
+            setOnClickListener { onTest() }
+        }
+        row.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            activity.dp(46),
+        )
+        val icon = ImageView(activity).apply {
+            setImageResource(R.drawable.ic_play)
+            tint(Palette.ACCENT)
+        }
+        row.addView(icon, LinearLayout.LayoutParams(activity.dp(15), activity.dp(15)))
+        row.addView(
+            activity.textView("发送测试弹幕", 14f, Palette.ACCENT, true).apply {
+                setPadding(activity.dp(8), 0, 0, 0)
+            },
+        )
         return row
     }
 
