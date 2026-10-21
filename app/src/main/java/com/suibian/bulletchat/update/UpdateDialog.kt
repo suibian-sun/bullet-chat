@@ -55,6 +55,22 @@ class UpdateDialog(
         setCanceledOnTouchOutside(true)
     }
 
+    override fun show() {
+        super.show()
+        window?.decorView?.let { decor ->
+            decor.alpha = 0f
+            decor.scaleX = 0.9f
+            decor.scaleY = 0.9f
+            decor.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(240L)
+                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                .start()
+        }
+    }
+
     private fun buildContent(): View {
         val container = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL

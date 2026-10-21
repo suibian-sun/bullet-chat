@@ -45,6 +45,8 @@ class SettingsPage(
     private val permissionStatuses = ArrayList<TextView>()
 
     private var binding = false
+    private var introPlayed = false
+    private lateinit var rootContainer: LinearLayout
 
     private class SliderHolder(
         val bar: SeekBar,
@@ -110,6 +112,18 @@ class SettingsPage(
         }
     }
 
+    /** 首次进入设置页：分组卡片自上而下错落出现。 */
+    fun playIntro() {
+        if (introPlayed) return
+        introPlayed = true
+        view.postDelayed({
+            for (index in 0 until rootContainer.childCount) {
+                rootContainer.getChildAt(index)
+                    .enterFromBottom(delay = 32L * index, distanceDp = 16)
+            }
+        }, 40L)
+    }
+
     fun setUpdateStatus(text: String) {
         if (::updateValue.isInitialized) updateValue.text = text
     }
@@ -124,6 +138,7 @@ class SettingsPage(
             orientation = LinearLayout.VERTICAL
             setPadding(activity.dp(20), activity.dp(18), activity.dp(20), activity.dp(28))
         }
+        rootContainer = root
         scroll.addView(
             root,
             android.widget.FrameLayout.LayoutParams(

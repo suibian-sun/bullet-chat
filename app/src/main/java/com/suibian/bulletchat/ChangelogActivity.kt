@@ -13,6 +13,7 @@ import com.suibian.bulletchat.ui.Palette
 import com.suibian.bulletchat.ui.dp
 import com.suibian.bulletchat.ui.eyebrow
 import com.suibian.bulletchat.ui.glass
+import com.suibian.bulletchat.ui.staggerEnter
 import com.suibian.bulletchat.ui.textView
 import com.suibian.bulletchat.ui.tint
 
@@ -88,6 +89,7 @@ class ChangelogActivity : Activity() {
             list.addView(entryCard(entry.version, entry.date, entry.title, entry.highlights, index == 0))
         }
         root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        list.post { list.staggerEnter(startDelay = 60L, step = 45L, distanceDp = 16) }
         return root
     }
 

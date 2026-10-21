@@ -20,6 +20,8 @@ import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -299,4 +301,52 @@ fun Context.settingRow(
         LinearLayout.LayoutParams.WRAP_CONTENT,
     )
     return row
+}
+
+/** 从下方淡入上浮，用于页面与卡片的入场。 */
+fun View.enterFromBottom(
+    delay: Long = 0L,
+    distanceDp: Int = 18,
+    duration: Long = 320L,
+    fromScale: Float = 1f,
+) {
+    val density = resources.displayMetrics.density
+    alpha = 0f
+    translationY = distanceDp * density
+    scaleX = fromScale
+    scaleY = fromScale
+    animate()
+        .alpha(1f)
+        .translationY(0f)
+        .scaleX(1f)
+        .scaleY(1f)
+        .setStartDelay(delay)
+        .setDuration(duration)
+        .setInterpolator(DecelerateInterpolator())
+        .start()
+}
+
+/** 子 View 依次错落入场。 */
+fun ViewGroup.staggerEnter(startDelay: Long = 0L, step: Long = 55L, distanceDp: Int = 18) {
+    for (index in 0 until childCount) {
+        getChildAt(index).enterFromBottom(
+            delay = startDelay + step * index,
+            distanceDp = distanceDp,
+        )
+    }
+}
+
+/** 数值刷新时的弹性脉冲。 */
+fun View.pulse() {
+    animate().cancel()
+    scaleX = 1f
+    scaleY = 1f
+    animate()
+        .scaleX(1.14f)
+        .scaleY(1.14f)
+        .setDuration(110L)
+        .withEndAction {
+            animate().scaleX(1f).scaleY(1f).setDuration(180L).start()
+        }
+        .start()
 }

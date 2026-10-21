@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.core.view.ViewCompat
@@ -38,7 +39,9 @@ class MainActivity : Activity() {
     private lateinit var launch: LaunchPage
     private lateinit var settings: SettingsPage
 
-    private var current = 0
+    private var current = -1
+
+    private val pageViews: List<View> by lazy { listOf(home.view, launch.view, settings.view) }
     private var checkingUpdate = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -150,19 +153,78 @@ class MainActivity : Activity() {
     }
 
     private fun select(target: Int) {
-        current = target
-        val pages = listOf(home.view, launch.view, settings.view)
-        pages.forEachIndexed { index, page ->
-            page.visibility = if (index == target) View.VISIBLE else View.GONE
+        if (target == current && pageViews[target].visibility == View.VISIBLE) {
+            nav.setSelected(target)
+            return
         }
+        val previous = current
+        current = target
         nav.setSelected(target)
+
+        pageViews.forEachIndexed { index, page ->
+            page.animate().cancel()
+            if (index == target) {
+                if (page.visibility != View.VISIBLE) {
+                    page.visibility = View.VISIBLE
+                    page.alpha = 0f
+                    page.translationY = dp(22).toFloat()
+                    page.scaleX = 0.985f
+                    page.scaleY = 0.985f
+                }
+                page.bringToFront()
+                page.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(320L)
+                    .setInterpolator(DecelerateInterpolator())
+                    .start()
+            } else if (page.visibility == View.VISIBLE) {
+                val goingLeft = index < target
+                page.animate()
+                    .alpha(0f)
+                    .translationY((if (goingLeft) -dp(12) else dp(12)).toFloat())
+                    .scaleX(0.99f)
+                    .scaleY(0.99f)
+                    .setDuration(160L)
+                    .setInterpolator(DecelerateInterpolator())
+                    .withEndAction {
+                        if (current != index) {
+                            page.visibility = View.GONE
+                            page.alpha = 1f
+                            page.translationY = 0f
+                            page.scaleX = 1f
+                            page.scaleY = 1f
+                        }
+                    }
+                    .start()
+            }
+        }
+
         if (target == 0) home.onVisible() else home.onHidden()
         when (target) {
-            0 -> home.refresh()
-            1 -> launch.refresh()
-            2 -> settings.refresh()
+            0 -> {
+                home.refresh()
+                home.playIntro()
+            }
+            1 -> {
+                launch.refresh()
+                launch.playIntro()
+            }
+            2 -> {
+                settings.refresh()
+                settings.playIntro()
+            }
         }
         nav.setFabRunning(SettingsStore.settings.value.enabled)
+        if (previous < 0) {
+            // 首帧：整体轻微放大，避免冷启动生硬
+            nav.alpha = 0f
+            nav.translationY = dp(16).toFloat()
+            nav.animate().alpha(1f).translationY(0f).setDuration(380L)
+                .setInterpolator(DecelerateInterpolator()).start()
+        }
     }
 
     private fun refreshAll() {

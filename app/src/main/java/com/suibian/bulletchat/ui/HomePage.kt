@@ -36,6 +36,14 @@ class HomePage(private val activity: Activity) {
     private val handler = Handler(Looper.getMainLooper())
     private var ticking = false
     private var stats: UsageStats = UsageStats()
+    private var introPlayed = false
+    private var lastToday = -1
+    private var lastTotal = -1
+
+    private lateinit var heroView: View
+    private lateinit var gridView: View
+    private lateinit var recentView: View
+    private lateinit var tipView: View
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -73,6 +81,10 @@ class HomePage(private val activity: Activity) {
 
         todayValue.text = stats.todayForwarded.toString()
         totalValue.text = stats.totalForwarded.toString()
+        if (lastToday >= 0 && stats.todayForwarded != lastToday) todayValue.pulse()
+        if (lastTotal >= 0 && stats.totalForwarded != lastTotal) totalValue.pulse()
+        lastToday = stats.todayForwarded
+        lastTotal = stats.totalForwarded
         totalRunValue.text = formatDuration(stats.totalRunMillis)
         sourceValue.text = settings.selectedPackages.size.toString()
 
@@ -93,6 +105,15 @@ class HomePage(private val activity: Activity) {
         }
 
         updateRuntime()
+    }
+
+    /** 首次进入主页时，卡片错落上浮。 */
+    fun playIntro() {
+        if (introPlayed) return
+        introPlayed = true
+        listOf(heroView, gridView, recentView, tipView).forEachIndexed { index, card ->
+            card.enterFromBottom(delay = 60L * index, distanceDp = 22)
+        }
     }
 
     private fun updateRuntime() {
@@ -135,10 +156,14 @@ class HomePage(private val activity: Activity) {
             ).apply { setPadding(0, activity.dp(7), 0, 0) },
         )
 
-        root.addView(heroCard(), wrap(top = 20))
-        root.addView(metricGrid(), wrap(top = 12))
-        root.addView(recentCard(), wrap(top = 12))
-        root.addView(tipCard(), wrap(top = 12))
+        heroView = heroCard()
+        gridView = metricGrid()
+        recentView = recentCard()
+        tipView = tipCard()
+        root.addView(heroView, wrap(top = 20))
+        root.addView(gridView, wrap(top = 12))
+        root.addView(recentView, wrap(top = 12))
+        root.addView(tipView, wrap(top = 12))
         return scroll
     }
 

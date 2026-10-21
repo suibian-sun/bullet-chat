@@ -161,9 +161,39 @@ class LaunchPage(
     private lateinit var todayText: TextView
     private lateinit var totalText: TextView
     private val permissionLabels = ArrayList<TextView>()
+    private var introPlayed = false
+    private lateinit var buttonHolder: FrameLayout
 
     init {
         view = build()
+    }
+
+    /** 首次进入启动页：按钮从中心放大浮现，其余内容依次上浮。 */
+    fun playIntro() {
+        if (introPlayed) return
+        introPlayed = true
+        buttonHolder.alpha = 0f
+        buttonHolder.scaleX = 0.78f
+        buttonHolder.scaleY = 0.78f
+        buttonHolder.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(460L)
+            .setInterpolator(android.view.animation.OvershootInterpolator(0.9f))
+            .start()
+        statusTitle.enterFromBottom(delay = 120L, distanceDp = 16)
+        statusSub.enterFromBottom(delay = 170L, distanceDp = 14)
+        view.postDelayed({
+            val inner = (view as? android.view.ViewGroup)?.getChildAt(0) as? android.view.ViewGroup
+            if (inner != null) {
+                for (index in 0 until inner.childCount) {
+                    val child = inner.getChildAt(index)
+                    if (child === buttonHolder || child === statusTitle || child === statusSub) continue
+                    child.enterFromBottom(delay = 55L * index, distanceDp = 18)
+                }
+            }
+        }, 60L)
     }
 
     fun refresh() {
@@ -221,7 +251,7 @@ class LaunchPage(
         )
 
         // 圆形启动按钮
-        val buttonHolder = FrameLayout(activity).apply {
+        buttonHolder = FrameLayout(activity).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 activity.dp(300),

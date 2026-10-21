@@ -11,6 +11,19 @@ data class ChangelogEntry(
 object Changelog {
     val entries: List<ChangelogEntry> = listOf(
         ChangelogEntry(
+            version = "1.1.2",
+            date = "2026-10-21",
+            title = "导航层级与过渡动画",
+            highlights = listOf(
+                "修复底部导航图标与圆形按钮被底座遮住的问题（elevation 导致绘制层级错乱）",
+                "中间圆形启动按钮改为浮起式，带圆形投影与按压缩放",
+                "页面切换新增淡入上浮 + 轻微缩放过渡，底部导航图标选中时弹性放大",
+                "主页、启动页、设置页首次进入时卡片错落入场",
+                "主页转发数字刷新时带弹性脉冲，更新弹窗缩放浮现",
+                "冷启动时导航栏自下而上浮现，历史更新页卡片依次出现",
+            ),
+        ),
+        ChangelogEntry(
             version = "1.1.1",
             date = "2026-10-21",
             title = "横屏与免打扰修复",
