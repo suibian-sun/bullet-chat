@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>BulletChat UI</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #06080D; }
+  body {
+    width: 393px; height: 852px; overflow: hidden;
+    font-family: "Noto Sans CJK SC", "Noto Sans", sans-serif;
+    color: #F3F7FC;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .phone {
+    position: relative; width: 393px; height: 852px; overflow: hidden;
+    background:
+      radial-gradient(85% 85% at 88% 2%, rgba(95,227,243,.30) 0%, rgba(95,227,243,.08) 45%, rgba(95,227,243,0) 100%),
+      radial-gradient(80% 80% at 2% 58%, rgba(139,124,255,.24) 0%, rgba(139,124,255,.06) 42%, rgba(139,124,255,0) 100%),
+      linear-gradient(160deg, #0B1524 0%, #08101B 45%, #06080D 78%);
+  }
+  .page { display: none; position: absolute; inset: 0; }
+  .page.active { display: block; }
+
+  /* 状态栏 */
+  .status {
+    height: 24px; display: flex; align-items: center; justify-content: space-between;
+    padding: 2px 22px 0; font-size: 11px; font-weight: 700; letter-spacing: .2px;
+  }
+  .status .icons { display: flex; align-items: center; gap: 5px; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; }
+  .bars i { display: block; width: 2.5px; background: #F3F7FC; border-radius: 1px; }
+  .bars i:nth-child(1){height:4px} .bars i:nth-child(2){height:6px}
+  .bars i:nth-child(3){height:8px} .bars i:nth-child(4){height:10px}
+  .wifi { width: 13px; height: 9px; }
+  .batt { width: 21px; height: 10px; border: 1.2px solid rgba(243,247,252,.85); border-radius: 3px; padding: 1px; }
+  .batt span { display: block; height: 100%; width: 72%; background: #F3F7FC; border-radius: 1px; }
+
+  .content { position: absolute; top: 24px; left: 0; right: 0; bottom: 120px; padding: 18px 20px 0; overflow: hidden; }
+
+  .eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 1.6px; color: #5FE3F3; }
+  h1 { margin: 8px 0 0; font-size: 30px; line-height: 1.16; font-weight: 700; letter-spacing: -0.6px; }
+  .sub { margin-top: 7px; font-size: 12px; color: #6B7C91; }
+
+  .card { border-radius: 24px; background: rgba(13,23,37,.86); border: 1px solid rgba(255,255,255,.12); }
+  .section-label { font-size: 10px; font-weight: 700; letter-spacing: 1.6px; color: #6B7C91; margin: 20px 0 9px 4px; }
+
+  /* 主页 */
+  .hero {
+    margin-top: 20px; border-radius: 26px; padding: 18px 20px 20px;
+    background: linear-gradient(135deg, #12303F 0%, #111C33 55%, #191A38 100%);
+  }
+  .status-row { display: flex; align-items: center; font-size: 12px; color: #A3B2C6; }
+  .dot { font-size: 9px; color: #3DDC97; margin-right: 6px; }
+  .time-big { font-size: 44px; font-weight: 300; letter-spacing: -1.3px; margin-top: 14px; }
+  .time-cap { font-size: 11px; color: #6B7C91; letter-spacing: .4px; margin-top: 2px; }
+  .hero p { margin: 14px 0 0; font-size: 11px; color: #A3B2C6; line-height: 1.35; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .metric { border-radius: 20px; background: rgba(13,23,37,.72); border: 1px solid rgba(255,255,255,.08); padding: 14px 16px 15px; }
+  .metric .label { display: flex; align-items: center; font-size: 11px; color: #6B7C91; }
+  .metric .label b { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .metric .value { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; margin-top: 9px; }
+
+  .recent { margin-top: 12px; padding: 16px 18px; }
+  .recent .head { display: flex; justify-content: space-between; align-items: center; }
+  .recent .app { margin-top: 12px; font-size: 13px; font-weight: 700; }
+  .recent .title { margin-top: 4px; font-size: 11px; color: #5FE3F3; }
+  .recent .text { margin-top: 7px; font-size: 12px; color: #A3B2C6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .tip { margin-top: 12px; padding: 14px 16px; border-radius: 20px; display: flex;
+    background: rgba(255,196,112,.08); border: 1px solid rgba(255,196,112,.20); }
+  .tip b { font-size: 11px; color: #FFC470; }
+  .tip span { font-size: 11px; color: #6B7C91; margin-left: 10px; line-height: 1.3; }
+
+  /* 底部导航 */
+  .nav { position: absolute; left: 14px; right: 14px; bottom: 30px; height: 88px; }
+  .nav-base { position: absolute; left: 0; right: 0; bottom: 4px; height: 64px; border-radius: 30px;
+    background: rgba(10,20,32,.95); border: 1px solid rgba(255,255,255,.15); }
+  .nav-items { position: absolute; left: 0; right: 0; bottom: 4px; height: 64px; display: flex; }
+  .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .nav-item .cap { font-size: 10px; font-weight: 700; letter-spacing: .4px; margin-top: 5px; }
+  .nav-item.on .cap { color: #5FE3F3; }
+  .nav-item.off .cap { color: #6B7C91; }
+  .fab { position: absolute; top: 2px; left: 50%; transform: translateX(-50%);
+    width: 62px; height: 62px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: rgba(95,227,243,.13); border: 1px solid rgba(95,227,243,.53);
+    box-shadow: 0 8px 22px rgba(0,0,0,.55), 0 0 18px rgba(95,227,243,.22); }
+  .fab .core { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #6EE9F7 0%, #63C8FF 55%, #8B7CFF 100%); }
+
+  /* 启动页 */
+  .btn-holder { height: 240px; margin-top: 10px; display: flex; align-items: center; justify-content: center; }
+  .launch-btn { position: relative; width: 232px; height: 232px; display: flex; align-items: center; justify-content: center; }
+  .halo { position: absolute; width: 186px; height: 186px; border-radius: 50%; background: rgba(95,227,243,.18); }
+  .ring1 { position: absolute; width: 209px; height: 209px; border-radius: 50%; border: 1px solid rgba(95,227,243,.40); }
+  .ring2 { position: absolute; width: 167px; height: 167px; border-radius: 50%; border: 1px solid rgba(95,227,243,.34); }
+  .core-big { position: relative; width: 144px; height: 144px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #6EE9F7 0%, #5BB8FF 50%, #8B7CFF 100%);
+    box-shadow: 0 14px 42px rgba(95,227,243,.32); }
+  .state-title { text-align: center; font-size: 20px; font-weight: 700; }
+  .state-sub { text-align: center; font-size: 12px; color: #6B7C91; margin-top: 8px; line-height: 1.3; }
+
+  .strip { margin-top: 22px; border-radius: 22px; padding: 15px 18px; display: flex;
+    background: rgba(13,23,37,.86); border: 1px solid rgba(255,255,255,.12); }
+  .strip .col { flex: 1; text-align: center; }
+  .strip .num { font-size: 22px; font-weight: 700; }
+  .strip .cap { font-size: 10px; color: #6B7C91; margin-top: 5px; }
+  .vline { width: 1px; height: 34px; background: rgba(255,255,255,.10); }
+
+  .perm-card { margin-top: 12px; padding: 4px 18px; }
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; }
+  .row .t { font-size: 14px; }
+  .row .s { font-size: 11px; color: #6B7C91; margin-top: 4px; line-height: 1.15; }
+  .row .v { font-size: 12px; font-weight: 700; color: #5FE3F3; display: flex; align-items: center; gap: 2px; }
+  .row .v.ok { color: #3DDC97; }
+  .divider { height: 1px; background: rgba(255,255,255,.08); }
+
+  .hint { margin-top: 12px; padding: 14px 16px; border-radius: 20px;
+    background: rgba(23,196,196,.08); border: 1px solid rgba(95,227,243,.12); }
+  .hint .t { font-size: 12px; color: #5FE3F3; font-weight: 700; }
+  .hint .b { font-size: 11px; color: #6B7C91; margin-top: 6px; line-height: 1.35; }
+
+  /* 设置页 */
+  .set-card { padding: 4px 18px; }
+  .tg { width: 44px; height: 26px; border-radius: 13px; position: relative; flex: none; }
+  .tg.off { background: #25313F; }
+  .tg.on { background: #5FE3F3; }
+  .tg i { position: absolute; top: 2px; width: 20px; height: 20px; border-radius: 50%; display: block; }
+  .tg.on i { right: 2px; background: #FFFFFF; }
+  .tg.off i { left: 2px; background: #8A97A6; }
+  .tg.dim { opacity: .42; }
+
+  .slider { padding: 15px 0 6px; }
+  .slider .top { display: flex; justify-content: space-between; align-items: center; }
+  .slider .name { font-size: 13px; color: #A3B2C6; }
+  .slider .val { font-size: 12px; font-weight: 700; color: #5FE3F3; }
+  .track { margin-top: 12px; height: 3px; border-radius: 2px; background: #202C3B; position: relative; }
+  .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: #5FE3F3; }
+  .knob { position: absolute; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #5FE3F3;
+    transform: translate(-50%, -50%); box-shadow: 0 0 0 4px rgba(95,227,243,.14); }
+
+  .kw { margin: 11px 0 12px; padding: 12px 14px; border-radius: 14px; min-height: 54px;
+    background: #132030; border: 1px solid rgba(255,255,255,.08); font-size: 14px; color: #5A6A7E; }
+
+  /* 弹幕演示 */
+  .chat { position: absolute; inset: 0; background: #111315; }
+  .chat .top { height: 52px; display: flex; align-items: center; padding: 0 16px;
+    background: #1A1C1F; border-bottom: 1px solid rgba(255,255,255,.05); }
+  .chat .top .back { width: 20px; height: 20px; margin-right: 8px; display: flex; }
+  .chat .top .name { font-size: 15px; color: #E6E8EA; }
+  .chat .body { padding: 14px 16px; display: flex; flex-direction: column; gap: 13px; }
+  .stamp { text-align: center; font-size: 11px; color: #5A5F66; margin-bottom: 2px; }
+  .msg { display: flex; gap: 8px; align-items: flex-start; }
+  .msg.me { justify-content: flex-end; }
+  .avatar { width: 32px; height: 32px; border-radius: 5px; flex: none;
+    background: linear-gradient(135deg,#4C7A5A,#2F4B39); }
+  .avatar.b { background: linear-gradient(135deg,#3C5A7A,#26374B); }
+  .bubble { background: #23262A; border-radius: 7px; padding: 9px 11px; font-size: 14px;
+    line-height: 1.45; color: #E6E8EA; max-width: 232px; }
+  .msg.me .bubble { background: #2A5A3C; }
+  .inputbar { position: absolute; left: 0; right: 0; bottom: 0; height: 56px; background: #1A1C1F;
+    border-top: 1px solid rgba(255,255,255,.05); display: flex; align-items: center; padding: 0 14px; }
+  .field { flex: 1; height: 34px; border-radius: 8px; background: #23262A; color: #6A7078;
+    font-size: 13px; display: flex; align-items: center; padding: 0 12px; }
+
+  .danmaku-band { position: absolute; left: 0; right: 0; top: 436px; height: 200px; }
+  .dan { position: absolute; display: flex; align-items: center; gap: 7px; padding: 6px 12px;
+    border-radius: 15px; background: rgba(6,11,19,.93); font-size: 16px; font-weight: 700;
+    white-space: nowrap; color: #fff; box-shadow: 0 5px 16px rgba(0,0,0,.55); }
+  .dan .ic { width: 17px; height: 17px; border-radius: 4px; flex: none; }
+  .ic.wx { background: linear-gradient(135deg,#4ECB71,#22A45D); }
+  .ic.qq { background: linear-gradient(135deg,#63B8FF,#2E7BE0); }
+</style>
+</head>
+<body>
+<div class="phone" id="phone"></div>
+
+<script>
+const icons = {
+  home: '<svg width="21" height="21" viewBox="0 0 24 24"><path fill="CUR" d="M12,3.2L2.8,11.3c-0.4,0.35 -0.15,1 0.38,1h1.82v7.4c0,0.6 0.5,1.1 1.1,1.1h4.1v-6.1h3.6v6.1h4.1c0.6,0 1.1,-0.5 1.1,-1.1v-7.4h1.82c0.53,0 0.78,-0.65 0.38,-1L12,3.2z"/></svg>',
+  gear: '<svg width="21" height="21" viewBox="0 0 24 24"><path fill="CUR" d="M19.14,12.94c0.04,-0.3 0.06,-0.61 0.06,-0.94c0,-0.32 -0.02,-0.64 -0.07,-0.94l2.03,-1.58c0.18,-0.14 0.23,-0.41 0.12,-0.61l-1.92,-3.32c-0.12,-0.22 -0.37,-0.29 -0.59,-0.22l-2.39,0.96c-0.5,-0.38 -1.03,-0.7 -1.62,-0.94L14.4,2.81c-0.04,-0.24 -0.24,-0.41 -0.48,-0.41h-3.84c-0.24,0 -0.43,0.17 -0.47,0.41L9.25,5.35C8.66,5.59 8.12,5.92 7.63,6.29L5.24,5.33c-0.22,-0.08 -0.47,0 -0.59,0.22L2.74,8.87C2.62,9.08 2.66,9.34 2.86,9.48l2.03,1.58C4.84,11.36 4.8,11.69 4.8,12s0.02,0.64 0.07,0.94l-2.03,1.58c-0.18,0.14 -0.23,0.41 -0.12,0.61l1.92,3.32c0.12,0.22 0.37,0.29 0.59,0.22l2.39,-0.96c0.5,0.38 1.03,0.7 1.62,0.94l0.36,2.54c0.05,0.24 0.24,0.41 0.48,0.41h3.84c0.24,0 0.44,-0.17 0.47,-0.41l0.36,-2.54c0.59,-0.24 1.13,-0.56 1.62,-0.94l2.39,0.96c0.22,0.08 0.47,0 0.59,-0.22l1.92,-3.32c0.12,-0.22 0.07,-0.47 -0.12,-0.61L19.14,12.94zM12,15.6c-1.98,0 -3.6,-1.62 -3.6,-3.6s1.62,-3.6 3.6,-3.6s3.6,1.62 3.6,3.6S13.98,15.6 12,15.6z"/></svg>',
+  play: '<svg width="20" height="20" viewBox="0 0 24 24"><path fill="#FFFFFF" d="M8,5.2v13.6c0,0.6 0.66,0.97 1.18,0.65l10.2,-6.8c0.47,-0.31 0.47,-1 0,-1.31L9.18,4.55C8.66,4.23 8,4.6 8,5.2z"/></svg>',
+  stop: '<svg width="18" height="18" viewBox="0 0 24 24"><path fill="#FFFFFF" d="M7,7h10a1.5,1.5 0 0 1 1.5,1.5v7a1.5,1.5 0 0 1 -1.5,1.5H7a1.5,1.5 0 0 1 -1.5,-1.5v-7A1.5,1.5 0 0 1 7,7z"/></svg>',
+  chev: '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="#6B7C91" d="M9.3,6.7c-0.39,0.39 -0.39,1.02 0,1.41L13.17,12l-3.87,3.89c-0.39,0.39 -0.39,1.02 0,1.41c0.39,0.39 1.02,0.39 1.41,0l4.59,-4.59c0.39,-0.39 0.39,-1.02 0,-1.41L10.71,6.7c-0.38,-0.38 -1.02,-0.38 -1.41,0z"/></svg>',
+  back: '<svg width="20" height="20" viewBox="0 0 24 24"><path fill="#E6E8EA" d="M15.4,5.4L8.8,12l6.6,6.6c0.4,0.4 1,0.4 1.4,0c0.4,-0.4 0.4,-1 0,-1.4L11.6,12l5.2,-5.2c0.4,-0.4 0.4,-1 0,-1.4C16.4,5 15.8,5 15.4,5.4z"/></svg>',
+  stopBig: '<svg width="34" height="34" viewBox="0 0 24 24"><path fill="#FFFFFF" d="M7,7h10a1.5,1.5 0 0 1 1.5,1.5v7a1.5,1.5 0 0 1 -1.5,1.5H7a1.5,1.5 0 0 1 -1.5,-1.5v-7A1.5,1.5 0 0 1 7,7z"/></svg>',
+  playBig: '<svg width="38" height="38" viewBox="0 0 24 24"><path fill="#FFFFFF" d="M8,5.2v13.6c0,0.6 0.66,0.97 1.18,0.65l10.2,-6.8c0.47,-0.31 0.47,-1 0,-1.31L9.18,4.55C8.66,4.23 8,4.6 8,5.2z"/></svg>'
+};
+function ic(name, color) { return icons[name].replace('CUR', color || '#5FE3F3'); }
+
+const statusBar = `
+  <div class="status">
+    <div>21:36</div>
+    <div class="icons">
+      <div class="bars"><i></i><i></i><i></i><i></i></div>
+      <svg class="wifi" viewBox="0 0 24 24"><path fill="#F3F7FC" d="M12,18.5a1.7,1.7 0 1 1 0,3.4a1.7,1.7 0 0,1 0,-3.4zM12,13.6c1.9,0 3.6,0.7 4.9,1.9l-1.7,1.7a4.9,4.9 0 0 0 -6.4,0L7.1,15.5c1.3,-1.2 3,-1.9 4.9,-1.9zM12,8.6c3.3,0 6.3,1.3 8.5,3.4l-1.7,1.7A9.6,9.6 0 0 0 12,10.9c-2.6,0 -5,1 -6.8,2.8L3.5,12A11.9,11.9 0 0 1 12,8.6zM12,3.6c4.7,0 8.9,1.9 12,4.9l-1.7,1.7A14.4,14.4 0 0 0 12,5.9c-4,0 -7.6,1.6 -10.3,4.3L0,8.5A16.9,16.9 0 0 1 12,3.6z"/></svg>
+      <div class="batt"><span></span></div>
+    </div>
+  </div>`;
+
+function nav(active) {
+  return `
+  <div class="nav">
+    <div class="nav-base"></div>
+    <div class="nav-items">
+      <div class="nav-item ${active===0?'on':'off'}">
+        ${ic('home', active===0?'#5FE3F3':'#6B7C91')}<div class="cap">主页</div>
+      </div>
+      <div class="nav-item"></div>
+      <div class="nav-item ${active===2?'on':'off'}">
+        ${ic('gear', active===2?'#5FE3F3':'#6B7C91')}<div class="cap">设置</div>
+      </div>
+    </div>
+    <div class="fab"><div class="core">${ic('stop')}</div></div>
+  </div>`;
+}
+
+const home = `
+<div class="page" data-screen="home">
+  ${statusBar}
+  <div class="content">
+    <div class="eyebrow">BULLETCHAT · 概览</div>
+    <h1>运行概览</h1>
+    <div class="sub">2026 年 10 月 21 日</div>
+
+    <div class="hero">
+      <div class="status-row"><span class="dot">●</span>弹幕服务运行中</div>
+      <div class="time-big">02:47:13</div>
+      <div class="time-cap">本次运行时长</div>
+      <p>弹幕会以单行滚动的方式展示完整消息内容，不换行、不截断。</p>
+    </div>
+
+    <div class="grid">
+      <div class="metric">
+        <div class="label"><b style="background:#5FE3F3"></b>今日转发</div>
+        <div class="value">27</div>
+      </div>
+      <div class="metric">
+        <div class="label"><b style="background:#8B7CFF"></b>累计转发</div>
+        <div class="value">1,284</div>
+      </div>
+      <div class="metric">
+        <div class="label"><b style="background:#4EA8FF"></b>累计运行</div>
+        <div class="value">6:32:08</div>
+      </div>
+      <div class="metric">
+        <div class="label"><b style="background:#3DDC97"></b>通知来源</div>
+        <div class="value">2</div>
+      </div>
+    </div>
+
+    <div class="card recent">
+      <div class="head">
+        <div class="eyebrow" style="color:#8B7CFF">最近一条</div>
+        <div style="font-size:10px;color:#6B7C91">21:36</div>
+      </div>
+      <div class="app">微信</div>
+      <div class="title">小林</div>
+      <div class="text">方案我改好了，你晚点看下，重点在第三页的交互流程</div>
+    </div>
+
+    <div class="tip">
+      <b>提示</b><span>主页数据仅保存在本机，卸载应用后会一并清除。</span>
+    </div>
+  </div>
+  ${nav(0)}
+</div>`;
+
+const launch = `
+<div class="page" data-screen="launch">
+  ${statusBar}
+  <div class="content">
+    <div class="eyebrow" style="color:#8B7CFF">控制台</div>
+    <h1>弹幕控制</h1>
+
+    <div class="btn-holder">
+      <div class="launch-btn">
+        <div class="halo"></div>
+        <div class="ring1"></div>
+        <div class="ring2"></div>
+        <div class="core-big">${ic('stopBig')}</div>
+      </div>
+    </div>
+
+    <div class="state-title">弹幕已开启</div>
+    <div class="state-sub">轻点按钮可随时停止，消息会继续在后台记录</div>
+
+    <div class="strip">
+      <div class="col"><div class="num">27</div><div class="cap">今日转发</div></div>
+      <div class="vline"></div>
+      <div class="col"><div class="num">1,284</div><div class="cap">累计转发</div></div>
+    </div>
+
+    <div class="card perm-card">
+      <div class="row">
+        <div><div class="t">通知使用权</div><div class="s">读取新消息</div></div>
+        <div class="v ok">已就绪 ${ic('chev')}</div>
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        <div><div class="t">悬浮窗权限</div><div class="s">在应用上方绘制弹幕</div></div>
+        <div class="v ok">已就绪 ${ic('chev')}</div>
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        <div><div class="t">免打扰权限</div><div class="s">勿扰模式下仍可显示</div></div>
+        <div class="v ok">已就绪 ${ic('chev')}</div>
+      </div>
+    </div>
+
+  </div>
+  ${nav(1)}
+</div>`;
+
+const settings = `
+<div class="page" data-screen="settings">
+  ${statusBar}
+  <div class="content">
+    <div class="eyebrow">PREFERENCES</div>
+    <h1>设置</h1>
+
+    <div class="section-label">通知来源</div>
+    <div class="card set-card">
+      <div class="row">
+        <div><div class="t">应用列表</div><div class="s">选择需要转成弹幕的应用</div></div>
+        <div class="v">2 个 ${ic('chev')}</div>
+      </div>
+      <div style="font-size:11px;color:#6B7C91;padding:2px 0 14px">微信、QQ</div>
+    </div>
+
+    <div class="section-label">显示方式</div>
+    <div class="card set-card">
+      <div class="row">
+        <div><div class="t">显示范围</div><div class="s">仅竖屏 / 仅横屏 / 全部方向</div></div>
+        <div class="v">全部方向 ${ic('chev')}</div>
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        <div><div class="t">仅亮屏时显示</div><div class="s">锁屏、息屏时不打扰</div></div>
+        <div class="tg on"><i></i></div>
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        <div><div class="t">过滤群聊汇总</div><div class="s">减少「N 条新消息」这类重复弹幕</div></div>
+        <div class="tg on"><i></i></div>
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        <div><div class="t">显示应用图标</div><div class="s">弹幕左侧显示来源图标</div></div>
+        <div class="tg on"><i></i></div>
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        <div><div class="t">点击弹幕打开应用</div><div class="s">点中弹幕直达会话，弹幕带内会拦截触摸</div></div>
+        <div class="tg off"><i></i></div>
+      </div>
+    </div>
+
+    <div class="section-label">外观与位置</div>
+    <div class="card set-card">
+      <div class="slider">
+        <div class="top"><div class="name">垂直位置</div><div class="val">12% · 距顶部</div></div>
+        <div class="track"><div class="fill" style="width:17%"></div><div class="knob" style="left:17%"></div></div>
+      </div>
+      <div class="divider"></div>
+      <div class="slider">
+        <div class="top"><div class="name">弹幕行数</div><div class="val">5 行</div></div>
+        <div class="track"><div class="fill" style="width:57%"></div><div class="knob" style="left:57%"></div></div>
+      </div>
+      <div class="divider"></div>
+      <div class="slider">
+        <div class="top"><div class="name">透明度</div><div class="val">85%</div></div>
+        <div class="track"><div class="fill" style="width:81%"></div><div class="knob" style="left:81%"></div></div>
+      </div>
+      <div class="divider"></div>
+      <div class="slider">
+        <div class="top"><div class="name">字号</div><div class="val">16 sp</div></div>
+        <div class="track"><div class="fill" style="width:25%"></div><div class="knob" style="left:25%"></div></div>
+      </div>
+    </div>
+  </div>
+  ${nav(2)}
+</div>`;
+
+const danmaku = `
+<div class="page" data-screen="danmaku">
+  <div class="chat">
+    ${statusBar}
+    <div class="top">
+      <div class="back">${ic('back')}</div>
+      <div class="name">小林</div>
+    </div>
+    <div class="body">
+      <div class="stamp">21:32</div>
+      <div class="msg"><div class="avatar"></div><div class="bubble">晚点一起吃饭吗？</div></div>
+      <div class="msg me"><div class="bubble">好，我八点前给你反馈</div><div class="avatar b"></div></div>
+      <div class="msg"><div class="avatar"></div><div class="bubble">方案我改好了，你晚点看下，重点在第三页的交互流程</div></div>
+      <div class="msg"><div class="avatar"></div><div class="bubble">还有几个动效参数需要你确认一下</div></div>
+      <div class="msg me"><div class="bubble">收到，今晚给你</div><div class="avatar b"></div></div>
+    </div>
+    <div class="inputbar"><div class="field">发送消息…</div></div>
+  </div>
+
+  <div class="danmaku-band">
+    <div class="dan" style="left:26px; top:0">
+      <span class="ic wx"></span>小林：晚点一起吃饭吗？
+    </div>
+    <div class="dan" style="left:8px; top:62px">
+      <span class="ic wx"></span>妈妈：这是一条很长的消息，弹幕不会截断内容，而是完整显示在同一行
+    </div>
+    <div class="dan" style="left:142px; top:124px">
+      <span class="ic qq"></span>产品群：新版本已经发到群里了
+    </div>
+  </div>
+</div>`;
+
+document.getElementById('phone').innerHTML = home + launch + settings + danmaku;
+const target = new URLSearchParams(location.search).get('s') || 'home';
+document.querySelectorAll('.page').forEach(p => {
+  if (p.dataset.screen === target) p.classList.add('active');
+});
+</script>
+</body>
+</html>

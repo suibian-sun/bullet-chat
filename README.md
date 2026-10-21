@@ -4,6 +4,24 @@
 
 ![Android CI](https://github.com/suibian-sun/bullet-chat/actions/workflows/android.yml/badge.svg)
 
+## 界面预览
+
+<p align="center">
+  <img src="docs/screenshots/home.png" width="292" alt="主页" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/launch.png" width="292" alt="启动页" />
+</p>
+<p align="center"><sub><b>主页</b>：运行时长与转发统计　　<b>启动</b>：圆形启动按钮与权限状态</sub></p>
+
+<p align="center">
+  <img src="docs/screenshots/settings.png" width="292" alt="设置页" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/danmaku.png" width="292" alt="弹幕效果" />
+</p>
+<p align="center"><sub><b>设置</b>：来源 / 显示 / 外观 / 权限 / 版本　　<b>弹幕效果</b>：长消息单行滚动，超出屏幕的部分随滚动出现</sub></p>
+
+> 图为按应用实际配色与尺寸渲染的界面预览，可直接用 [docs/ui-preview/phone.html](docs/ui-preview/phone.html) 在浏览器中复现；实机效果以安装后的 APK 为准。
+
 ## v1.1 新界面
 
 底部三页导航，中间是一个圆形启动按钮：
