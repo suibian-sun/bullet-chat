@@ -7,13 +7,17 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.text.TextPaint
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.Choreographer
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import com.suibian.bulletchat.data.CardStyle
 import com.suibian.bulletchat.model.DanmakuMessage
 import kotlin.math.max
 import kotlin.math.min
@@ -22,9 +26,10 @@ import kotlin.random.Random
 /**
  * 轻量弹幕视图（单行模式）：
  * - 每条消息只占一行，不换行；文本超过屏幕宽度时按完整宽度绘制，靠滚动逐字露出
- * - 所有弹幕共用一支 TextPaint，避免每条消息各建一支画笔
+ * - 三种卡片外观：胶囊气泡 / 通知卡片 / 极简文字
+ * - 卡片透明度与文字透明度分开控制
  * - 尺寸变化（横竖屏切换）时保留在屏弹幕并按比例重排，不丢消息也不闪屏
- * - 空闲自动停帧；文字带深色描边，浅色背景上依然清晰
+ * - 空闲自动停帧；长按可复制弹幕内容
  */
 class DanmakuView @JvmOverloads constructor(
     context: Context,
@@ -33,11 +38,13 @@ class DanmakuView @JvmOverloads constructor(
 
     data class Config(
         val laneCount: Int = 5,
-        val alphaPercent: Int = 85,
+        val alphaPercent: Int = 100,
         val fontSp: Int = 16,
         val speedPercent: Int = 100,
         val showAppIcon: Boolean = true,
         val clickable: Boolean = false,
+        val cardStyle: CardStyle = CardStyle.BUBBLE,
+        val cardAlphaPercent: Int = 92,
     )
 
     private class Item(
@@ -46,7 +53,7 @@ class DanmakuView @JvmOverloads constructor(
         val text: String,
         val width: Float,
         val height: Float,
-        val speed: Float,
+        var speed: Float,
         val baselineOffset: Float,
         val iconSize: Float,
         val iconGap: Float,
@@ -78,6 +85,7 @@ class DanmakuView @JvmOverloads constructor(
         }
 
     var onDanmakuClick: ((DanmakuMessage) -> Unit)? = null
+    var onDanmakuLongClick: ((DanmakuMessage) -> Unit)? = null
 
     private val density = resources.displayMetrics.density
     private val spToPx = TypedValue.applyDimension(
@@ -87,6 +95,8 @@ class DanmakuView @JvmOverloads constructor(
     )
 
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val accentBarPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 1f * density
@@ -98,12 +108,12 @@ class DanmakuView @JvmOverloads constructor(
     }
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        color = Color.WHITE
+        color = 0xFF101B2D.toInt()
         isSubpixelText = true
     }
-    private val strokePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val haloPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        color = 0xFF050B14.toInt()
+        color = Color.WHITE
         style = Paint.Style.STROKE
         strokeJoin = Paint.Join.ROUND
     }
@@ -112,16 +122,29 @@ class DanmakuView @JvmOverloads constructor(
     private val waiting = ArrayList<Item>(8)
     private val laneLast = HashMap<Int, Item>()
     private val rect = RectF()
+    private val innerRect = RectF()
     private val iconRect = RectF()
 
     private var laneHeight = 1f
     private var alpha = 255
+    private var cardAlpha = 235
     private var attached = false
     private var paused = false
     private var running = false
     private var lastFrameNs = 0L
     private var pressedItem: Item? = null
+    private var longPressFired = false
     private var readyAction: (() -> Unit)? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private val longPressAction = Runnable {
+        val target = pressedItem ?: return@Runnable
+        longPressFired = true
+        target.pressed = false
+        pressedItem = null
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        onDanmakuLongClick?.invoke(target.message)
+        invalidate()
+    }
 
     init {
         applyPaints()
@@ -129,23 +152,25 @@ class DanmakuView @JvmOverloads constructor(
 
     private fun applyPaints() {
         alpha = (config.alphaPercent.coerceIn(5, 100) / 100f * 255f).toInt()
+        cardAlpha = (config.cardAlphaPercent.coerceIn(0, 100) / 100f * 255f).toInt()
         val textSize = config.fontSp * spToPx
         textPaint.textSize = textSize
         textPaint.alpha = alpha
-        strokePaint.textSize = textSize
-        strokePaint.strokeWidth = (textSize * 0.09f).coerceIn(1f, 4f * density)
-        strokePaint.alpha = alpha
+        haloPaint.textSize = textSize
+        haloPaint.strokeWidth = (textSize * 0.20f).coerceIn(2f, 5f * density)
+        haloPaint.alpha = alpha
         iconPaint.alpha = alpha
-        pressedPaint.color = Color.argb((alpha * 0.9f).toInt(), 95, 227, 243)
+        pressedPaint.color = Color.argb((alpha * 0.9f).toInt(), 37, 99, 235)
     }
 
     /**
      * 立即渲染一条弹幕。
      * 视图尚未完成布局时直接丢弃——不缓存、不在之后补播。
      */
-    fun push(message: DanmakuMessage) {
-        if (width <= 0 || height <= 0) return
+    fun push(message: DanmakuMessage): Boolean {
+        if (width <= 0 || height <= 0) return false
         enqueue(buildItem(message))
+        return true
     }
 
     /** 视图可绘制后再执行一次动作（用于测试弹幕，不缓存任何消息）。 */
@@ -162,6 +187,7 @@ class DanmakuView @JvmOverloads constructor(
         waiting.clear()
         laneLast.clear()
         pressedItem = null
+        handler.removeCallbacks(longPressAction)
         invalidate()
     }
 
@@ -226,6 +252,8 @@ class DanmakuView @JvmOverloads constructor(
             item.lane = lane
             item.x = width.toFloat()
             item.top = lane * laneHeight + (laneHeight - item.height) / 2f
+            // 同轨道后发弹幕不得快于前一条，否则会在滚动途中追尾重叠
+            if (last != null) item.speed = min(item.speed, last.speed)
             laneLast[lane] = item
             return true
         }
@@ -264,9 +292,9 @@ class DanmakuView @JvmOverloads constructor(
             }
         }
 
-        // 排队超过 8 秒仍未上轨的消息已过时，直接丢弃，不延后补发
+        // 排队超过 6 秒仍未上轨的消息已过时，直接丢弃，不延后补发
         val now = SystemClock.elapsedRealtime()
-        waiting.removeAll { now - it.bornAt > 8_000L }
+        waiting.removeAll { now - it.bornAt > 6_000L }
 
         var moved = 0
         while (waiting.isNotEmpty() && moved < 3) {
@@ -307,21 +335,57 @@ class DanmakuView @JvmOverloads constructor(
         super.onDraw(canvas)
         if (items.isEmpty()) return
 
+        val style = config.cardStyle
         for (item in items) {
             val itemAlpha = (alpha * item.appear).toInt().coerceIn(0, 255)
             if (itemAlpha <= 0) continue
 
             rect.set(item.x, item.top, item.x + item.width, item.top + item.height)
-            val radius = item.height / 2f
+            val radius = when (style) {
+                CardStyle.BUBBLE -> item.height / 2f
+                CardStyle.CARD -> 11f * density
+                CardStyle.MINIMAL -> 0f
+            }
 
-            bgPaint.color = Color.argb((itemAlpha * 0.80f).toInt(), 7, 13, 22)
-            canvas.drawRoundRect(rect, radius, radius, bgPaint)
+            if (style != CardStyle.MINIMAL) {
+                val fillAlpha = (cardAlpha * item.appear).toInt().coerceIn(0, 255)
 
-            borderPaint.color = Color.argb((itemAlpha * 0.14f).toInt(), 255, 255, 255)
-            canvas.drawRoundRect(rect, radius, radius, borderPaint)
+                // 轻投影：白色卡片放在任意应用上都需要一点边界感
+                if (fillAlpha > 60) {
+                    shadowPaint.color = Color.argb((itemAlpha * 0.10f).toInt(), 15, 40, 80)
+                    canvas.drawRoundRect(
+                        rect.left,
+                        rect.top + 1.5f * density,
+                        rect.right,
+                        rect.bottom + 1.5f * density,
+                        radius,
+                        radius,
+                        shadowPaint,
+                    )
+                }
 
-            if (item.pressed) {
-                canvas.drawRoundRect(rect, radius, radius, pressedPaint)
+                bgPaint.color = Color.argb(fillAlpha, 255, 255, 255)
+                canvas.drawRoundRect(rect, radius, radius, bgPaint)
+
+                borderPaint.color = Color.argb((itemAlpha * 0.22f).toInt(), 30, 64, 120)
+                canvas.drawRoundRect(rect, radius, radius, borderPaint)
+
+                if (style == CardStyle.CARD) {
+                    // 左侧强调条，接近系统通知的视觉语言
+                    accentBarPaint.color = Color.argb(itemAlpha, 37, 99, 235)
+                    val inset = 6f * density
+                    innerRect.set(
+                        rect.left + inset,
+                        rect.top + inset,
+                        rect.left + inset + 3.5f * density,
+                        rect.bottom - inset,
+                    )
+                    canvas.drawRoundRect(innerRect, 2f * density, 2f * density, accentBarPaint)
+                }
+
+                if (item.pressed) {
+                    canvas.drawRoundRect(rect, radius, radius, pressedPaint)
+                }
             }
 
             var contentX = item.x + 12f * density
@@ -329,6 +393,11 @@ class DanmakuView @JvmOverloads constructor(
             if (icon != null) {
                 val iconTop = item.top + (item.height - item.iconSize) / 2f
                 iconRect.set(contentX, iconTop, contentX + item.iconSize, iconTop + item.iconSize)
+                if (style == CardStyle.MINIMAL) {
+                    // 极简模式没有卡片底色，给图标垫一层白色圆角，避免在深色应用上看不清
+                    bgPaint.color = Color.argb((itemAlpha * 0.86f).toInt(), 255, 255, 255)
+                    canvas.drawRoundRect(iconRect, 5f * density, 5f * density, bgPaint)
+                }
                 iconPaint.alpha = itemAlpha
                 canvas.drawBitmap(icon, null, iconRect, iconPaint)
                 contentX += item.iconSize + item.iconGap
@@ -336,9 +405,11 @@ class DanmakuView @JvmOverloads constructor(
 
             val baseline = item.top + item.baselineOffset
             textPaint.alpha = itemAlpha
-            strokePaint.alpha = itemAlpha
-            // 先描边再填充，浅色背景上也能看清
-            canvas.drawText(item.text, contentX, baseline, strokePaint)
+            if (style == CardStyle.MINIMAL) {
+                // 无底色时用白色描边保证在深色 / 浅色应用上都可读
+                haloPaint.alpha = itemAlpha
+                canvas.drawText(item.text, contentX, baseline, haloPaint)
+            }
             canvas.drawText(item.text, contentX, baseline, textPaint)
         }
     }
@@ -368,7 +439,10 @@ class DanmakuView @JvmOverloads constructor(
                 }
                 pressedItem?.pressed = false
                 pressedItem = hit
+                longPressFired = false
                 hit.pressed = true
+                handler.removeCallbacks(longPressAction)
+                handler.postDelayed(longPressAction, 480L)
                 invalidate()
                 return true
             }
@@ -378,28 +452,33 @@ class DanmakuView @JvmOverloads constructor(
                 if (hit !== pressedItem) {
                     pressedItem?.pressed = false
                     pressedItem = null
+                    handler.removeCallbacks(longPressAction)
                     invalidate()
                 }
                 return true
             }
 
             MotionEvent.ACTION_UP -> {
+                handler.removeCallbacks(longPressAction)
                 val hit = findItemAt(event.x, event.y)
                 val target = pressedItem
                 pressedItem?.pressed = false
                 pressedItem = null
-                if (target != null && target === hit) {
+                if (!longPressFired && target != null && target === hit) {
                     removeItem(target)
                     performClick()
                     onDanmakuClick?.invoke(target.message)
                 }
+                longPressFired = false
                 invalidate()
                 return true
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                handler.removeCallbacks(longPressAction)
                 pressedItem?.pressed = false
                 pressedItem = null
+                longPressFired = false
                 invalidate()
                 return true
             }
@@ -460,6 +539,7 @@ class DanmakuView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         attached = false
         stopLoop()
+        handler.removeCallbacks(longPressAction)
         super.onDetachedFromWindow()
     }
 }

@@ -10,6 +10,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.suibian.bulletchat.data.ContentMode
 import com.suibian.bulletchat.data.SettingsStore
 import com.suibian.bulletchat.data.StatsStore
 import com.suibian.bulletchat.model.DanmakuMessage
@@ -48,7 +49,6 @@ class BulletNotificationListener : NotificationListenerService() {
     }
 
     private val recent = LinkedHashMap<String, Long>()
-    private var cachedBlacklist: Pair<String, List<String>>? = null
     private val labelCache = HashMap<String, String>()
 
     override fun onNotificationPosted(sbn: StatusBarNotification?, rankingMap: RankingMap?) {
@@ -67,6 +67,14 @@ class BulletNotificationListener : NotificationListenerService() {
         val pkg = sbn.packageName ?: return
         if (pkg == packageName) return
         if (pkg == "android" || pkg == "com.android.systemui") return
+
+        // 安静时段：整段时间内不打扰，消息也不计入统计
+        if (settings.inQuietHours(currentMinuteOfDay())) {
+            Log.d(TAG, "安静时段，跳过：$pkg")
+            return
+        }
+
+        // 来源应用 + 白/黑名单
         if (!settings.accepts(pkg)) return
 
         // 常驻通知（音乐、下载、充电等）不是聊天消息
@@ -87,7 +95,7 @@ class BulletNotificationListener : NotificationListenerService() {
             return
         }
 
-        if (isBlacklisted(title, text, settings.blacklist)) {
+        if (settings.keywordBlocks(title, text)) {
             Log.d(TAG, "关键词过滤：$title / $text")
             return
         }
@@ -95,19 +103,27 @@ class BulletNotificationListener : NotificationListenerService() {
 
         val appLabel = resolveAppLabel(pkg)
         val icon = if (settings.showAppIcon) AppIconLoader.load(this, pkg, 36) else null
-        StatsStore.recordForwarded(appLabel, title, text)
+        // 按内容模式裁剪标题与正文，保证弹幕只展示用户想看的部分
+        val (shownTitle, shownText) = when (settings.contentMode) {
+            ContentMode.TITLE_AND_TEXT -> title to text
+            ContentMode.TEXT_ONLY -> "" to text.ifBlank { title }
+            ContentMode.TITLE_ONLY -> title to ""
+        }
         val message = DanmakuMessage(
             packageName = pkg,
             appLabel = appLabel,
-            title = title,
-            text = text,
+            title = shownTitle,
+            text = shownText,
             icon = icon,
             contentIntent = notification.contentIntent,
         )
 
         // 服务被回收时先拉起，本条消息立即投递；投不出去就丢弃，不做延迟补发
         val delivered = DanmakuBus.emit(message)
-        if (!delivered) {
+        if (delivered) {
+            // 只有真正交给悬浮层才计数，避免服务未就绪时把统计刷高
+            StatsStore.recordForwarded(appLabel, shownTitle, shownText)
+        } else {
             // 没有可用悬浮层：拉起服务（已运行时会尝试补挂），本条不补发
             Log.d(TAG, "悬浮层未就绪，本条消息未投递：$title")
             OverlayService.start(this)
@@ -183,23 +199,10 @@ class BulletNotificationListener : NotificationListenerService() {
         .replace(Regex("\\s*\\n\\s*"), "\n")
         .trim()
 
-    private fun isBlacklisted(title: String, text: String, blacklist: String): Boolean {
-        if (blacklist.isBlank()) return false
-        val keywords = parseKeywords(blacklist)
-        if (keywords.isEmpty()) return false
-        val haystack = "$title\n$text".lowercase()
-        return keywords.any { haystack.contains(it) }
-    }
-
-    /** 关键词缓存：设置变化时重新解析，避免每条通知都编译正则。 */
-    private fun parseKeywords(raw: String): List<String> {
-        val cached = cachedBlacklist
-        if (cached != null && cached.first == raw) return cached.second
-        val list = raw.split(Regex("[,，;；、\\n]+"))
-            .map { it.trim().lowercase() }
-            .filter { it.isNotEmpty() }
-        cachedBlacklist = raw to list
-        return list
+    private fun currentMinuteOfDay(): Int {
+        val calendar = java.util.Calendar.getInstance()
+        return calendar.get(java.util.Calendar.HOUR_OF_DAY) * 60 +
+            calendar.get(java.util.Calendar.MINUTE)
     }
 
     private fun isDuplicate(key: String): Boolean {

@@ -7,6 +7,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.Intent
@@ -24,6 +26,7 @@ import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -68,12 +71,15 @@ class OverlayService : Service() {
         const val ACTION_TEST = "com.suibian.bulletchat.action.TEST"
         const val ACTION_REFRESH = "com.suibian.bulletchat.action.REFRESH"
 
-        fun start(context: Context) {
+        /** @return 是否成功把启动请求交给系统（Android 12+ 后台限制可能拒绝）。 */
+        fun start(context: Context): Boolean {
             val intent = Intent(context, OverlayService::class.java).setAction(ACTION_START)
-            try {
+            return try {
                 ContextCompat.startForegroundService(context, intent)
+                true
             } catch (t: Throwable) {
                 Log.w(TAG, "启动弹幕服务失败", t)
+                false
             }
         }
 
@@ -127,7 +133,8 @@ class OverlayService : Service() {
         super.onCreate()
         SettingsStore.init(this)
         StatsStore.init(this)
-        StatsStore.sessionStart()
+        // 只有真正开启弹幕时才记一次运行会话，避免被误启动时污染统计
+        if (SettingsStore.settings.value.enabled) StatsStore.sessionStart()
         isRunning = true
         settings = SettingsStore.settings.value
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -137,12 +144,17 @@ class OverlayService : Service() {
         registerScreenReceiver()
         observeSettings()
 
-        if (isOrientationAllowed(settings)) {
+        if (settings.enabled && isOrientationAllowed(settings)) {
             attachOverlay()
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 总开关已关闭时被拉起（例如系统重试、外部误调用）：直接退出，不留僵尸前台服务
+        if (intent?.action != ACTION_STOP && !SettingsStore.settings.value.enabled) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         when (intent?.action) {
             ACTION_STOP -> {
                 SettingsStore.update({ it.copy(enabled = false) })
@@ -271,6 +283,7 @@ class OverlayService : Service() {
 
     private fun attachOverlay(orientationOverride: Int? = null) {
         if (danmakuView != null) return
+        if (!settings.enabled) return
         if (!Permissions.canDrawOverlays(this)) {
             Log.w(TAG, "没有悬浮窗权限")
             return
@@ -281,6 +294,7 @@ class OverlayService : Service() {
         val view = DanmakuView(this).apply {
             config = settings.toConfig()
             onDanmakuClick = { message -> openMessage(message) }
+            onDanmakuLongClick = { message -> copyMessage(message) }
         }
         try {
             windowManager.addView(view, buildLayoutParams())
@@ -356,7 +370,7 @@ class OverlayService : Service() {
     private fun buildNotification() = NotificationCompat.Builder(this, currentChannelId())
         .setSmallIcon(R.drawable.ic_notification)
         .setContentTitle("弹幕通知运行中")
-        .setContentText("微信 / QQ 等应用的新消息将以弹幕显示")
+        .setContentText("所选应用的新消息将以弹幕显示")
         .setOngoing(true)
         .setShowWhen(false)
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
@@ -504,7 +518,7 @@ class OverlayService : Service() {
 
         if (pending != null) {
             try {
-                if (options != null) {
+                if (options != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     pending.send(this, 0, null, null, null, null, options.toBundle())
                 } else {
                     pending.send()
@@ -529,31 +543,35 @@ class OverlayService : Service() {
     }
 
     @SuppressLint("PrivateApi", "DiscouragedPrivateApi")
-    private fun floatingOptions(): ActivityOptions? = try {
-        val options = ActivityOptions.makeBasic()
-        var applied = false
-        try {
-            val method = ActivityOptions::class.java
-                .getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
-            method.invoke(options, 5) // WINDOWING_MODE_FREEFORM
-            applied = true
+    private fun floatingOptions(): ActivityOptions? {
+        // 自由窗口 / setLaunchBounds 只在 Android 7.0+ 有意义
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
+        return try {
+            val options = ActivityOptions.makeBasic()
+            var applied = false
+            try {
+                val method = ActivityOptions::class.java
+                    .getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
+                method.invoke(options, 5) // WINDOWING_MODE_FREEFORM
+                applied = true
+            } catch (_: Throwable) {
+                // 隐藏 API 不可用
+            }
+            if (!applied && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                val dm = resources.displayMetrics
+                options.setLaunchBounds(
+                    Rect(
+                        dp(8),
+                        dp(64),
+                        (dm.widthPixels * 0.78f).toInt(),
+                        (dm.heightPixels * 0.56f).toInt(),
+                    ),
+                )
+            }
+            options
         } catch (_: Throwable) {
-            // 隐藏 API 不可用
+            null
         }
-        if (!applied && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val dm = resources.displayMetrics
-            options.setLaunchBounds(
-                Rect(
-                    dp(8),
-                    dp(64),
-                    (dm.widthPixels * 0.78f).toInt(),
-                    (dm.heightPixels * 0.56f).toInt(),
-                ),
-            )
-        }
-        options
-    } catch (_: Throwable) {
-        null
     }
 
     override fun onDestroy() {
@@ -593,5 +611,20 @@ class OverlayService : Service() {
         speedPercent = speedPercent,
         showAppIcon = showAppIcon,
         clickable = clickToOpen,
+        cardStyle = cardStyle,
+        cardAlphaPercent = cardAlphaPercent,
     )
+
+    /** 长按弹幕：把完整内容复制到剪贴板，方便回到应用里粘贴查看。 */
+    private fun copyMessage(message: DanmakuMessage) {
+        val content = message.displayText
+        if (content.isBlank()) return
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("弹幕内容", content))
+            Toast.makeText(this, "已复制弹幕内容", Toast.LENGTH_SHORT).show()
+        } catch (t: Throwable) {
+            Log.w(TAG, "复制弹幕失败", t)
+        }
+    }
 }

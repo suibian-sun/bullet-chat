@@ -84,10 +84,27 @@ object StatsStore {
             .apply()
     }
 
+    /**
+     * 开始一次新的运行会话。
+     * 若上一次会话没有正常结束（进程被系统回收），先把这段时长补进累计运行，
+     * 避免「累计运行」在每次被回收后都丢掉一段时间。
+     */
     @Synchronized
     fun sessionStart() {
         if (!initialized) return
-        prefs.edit().putLong(KEY_SESSION_START, System.currentTimeMillis()).apply()
+        val now = System.currentTimeMillis()
+        val previous = prefs.getLong(KEY_SESSION_START, 0L)
+        // 正常停止会走 sessionEnd；这里只补「进程被回收、服务随即重启」的那一小段，
+        // 上限 10 分钟，避免用户强制停止后隔天再打开时把整天都算成运行时长。
+        val pending = if (previous > 0L) {
+            (now - previous).coerceIn(0L, 10L * 60 * 1000)
+        } else {
+            0L
+        }
+        prefs.edit()
+            .putLong(KEY_TOTAL_RUN, prefs.getLong(KEY_TOTAL_RUN, 0L) + pending)
+            .putLong(KEY_SESSION_START, now)
+            .apply()
     }
 
     @Synchronized

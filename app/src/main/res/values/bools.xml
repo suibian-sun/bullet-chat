@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 快捷设置磁贴仅 Android 7.0+ 可用 -->
+    <bool name="qs_tile_enabled">false</bool>
+</resources>

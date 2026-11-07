@@ -51,7 +51,7 @@ class UpdateDialog(
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             setGravity(Gravity.CENTER)
             addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            setDimAmount(0.72f)
+            setDimAmount(0.45f)
         }
         setCanceledOnTouchOutside(true)
     }
@@ -80,7 +80,7 @@ class UpdateDialog(
 
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            background = activity.glass(28f, 0xFA0A1422.toInt(), 0x26FFFFFF)
+            background = activity.glass(28f, 0xFFFFFFFF.toInt(), 0xFFE3EAF4.toInt())
             setPadding(activity.dp(22), activity.dp(22), activity.dp(22), activity.dp(20))
             elevation = activity.dp(18).toFloat()
         }
@@ -121,7 +121,7 @@ class UpdateDialog(
         val notesScroll = ScrollView(activity).apply {
             isVerticalScrollBarEnabled = false
             addView(notesView, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            background = activity.glass(16f, 0xFF0F1B29.toInt(), 0x12FFFFFF)
+            background = activity.glass(16f, 0xFFF5F8FE.toInt(), 0x00000000)
             setPadding(activity.dp(14), activity.dp(12), activity.dp(14), activity.dp(12))
         }
         card.addView(
@@ -141,7 +141,7 @@ class UpdateDialog(
             max = 100
             progress = 0
             progressTintList = ColorStateList.valueOf(Palette.ACCENT)
-            progressBackgroundTintList = ColorStateList.valueOf(0xFF1B2836.toInt())
+            progressBackgroundTintList = ColorStateList.valueOf(0xFFE1E9F4.toInt())
         }
         progressArea.addView(
             progressBar,
@@ -165,7 +165,7 @@ class UpdateDialog(
 
         val close = activity.textView("关闭", 14f, Palette.TEXT_DIM, true).apply {
             gravity = Gravity.CENTER
-            background = activity.glass(16f, 0xFF152232.toInt(), 0x1FFFFFFF)
+            background = activity.glass(16f, 0xFFF0F4FA.toInt(), 0x00000000)
             isClickable = true
             pressScale()
             setOnClickListener { dismiss() }
@@ -175,7 +175,7 @@ class UpdateDialog(
             LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply { marginEnd = activity.dp(5) },
         )
 
-        val update = activity.textView("立即更新", 14f, 0xFF06202A.toInt(), true).apply {
+        val update = activity.textView("立即更新", 14f, 0xFFFFFFFF.toInt(), true).apply {
             gravity = Gravity.CENTER
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR, ACCENT_GRADIENT,

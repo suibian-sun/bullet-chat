@@ -54,9 +54,9 @@ class LaunchButton(context: Context) : View(context) {
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         fillPaint.shader = LinearGradient(
-            w * 0.2f, h * 0.1f, w * 0.85f, h * 0.95f,
-            intArrayOf(0xFF6EE9F7.toInt(), 0xFF5BB8FF.toInt(), 0xFF8B7CFF.toInt()),
-            floatArrayOf(0f, 0.5f, 1f),
+            w * 0.15f, h * 0.05f, w * 0.9f, h * 0.95f,
+            intArrayOf(0xFF5B9BFF.toInt(), 0xFF2E6BF2.toInt(), 0xFF1D4ED8.toInt()),
+            floatArrayOf(0f, 0.55f, 1f),
             Shader.TileMode.CLAMP,
         )
     }
@@ -67,14 +67,14 @@ class LaunchButton(context: Context) : View(context) {
         val outer = minOf(width, height) / 2f
 
         if (running) {
-            haloPaint.color = Color.argb((60 * (1f - pulse)).toInt(), 95, 227, 243)
+            haloPaint.color = Color.argb((52 * (1f - pulse)).toInt(), 37, 99, 235)
             canvas.drawCircle(cx, cy, outer * (0.82f + 0.16f * pulse), haloPaint)
         }
-        haloPaint.color = if (running) 0x2E5FE3F3 else 0x145FE3F3
+        haloPaint.color = if (running) 0x2E2563EB else 0x142563EB
         canvas.drawCircle(cx, cy, outer * 0.8f, haloPaint)
 
         ringPaint.strokeWidth = dp(1f)
-        ringPaint.color = if (running) 0x665FE3F3 else 0x2E5FE3F3
+        ringPaint.color = if (running) 0x552563EB else 0x262563EB
         canvas.drawCircle(cx, cy, outer * 0.9f, ringPaint)
         canvas.drawCircle(cx, cy, outer * 0.72f, ringPaint)
 
@@ -153,7 +153,6 @@ class LaunchPage(
     private val activity: Activity,
     private val onToggle: () -> Unit,
     private val onPermissionClick: (Int) -> Unit,
-    private val onTest: () -> Unit,
 ) {
 
     val view: View
@@ -307,13 +306,12 @@ class LaunchPage(
         root.addView(statsStrip(), wrap(top = 22))
         dndHint = activity.textView("", 11f, Palette.WARN).apply {
             setPadding(activity.dp(14), activity.dp(11), activity.dp(14), activity.dp(11))
-            background = activity.glass(16f, 0x1AFFC470, 0x33FFC470)
+            background = activity.glass(16f, 0xFFFFF7E8.toInt(), 0x33E08A00)
             visibility = View.GONE
             isClickable = true
             setOnClickListener { onPermissionClick(2) }
         }
         root.addView(dndHint, wrap(top = 10))
-        root.addView(testButton(), wrap(top = 12))
         root.addView(permissionCard(), wrap(top = 12))
         root.addView(hintCard(), wrap(top = 12))
         return scroll
@@ -341,7 +339,7 @@ class LaunchPage(
         row.addView(left, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
         row.addView(
-            View(activity).apply { setBackgroundColor(0x1AFFFFFF) },
+            View(activity).apply { setBackgroundColor(0x141B3455) },
             LinearLayout.LayoutParams(activity.dp(1), activity.dp(34)).apply {
                 gravity = Gravity.CENTER_VERTICAL
             },
@@ -360,33 +358,6 @@ class LaunchPage(
             },
         )
         row.addView(right, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        return row
-    }
-
-    /** 发送测试弹幕：胶囊按钮，点击后由服务侧发三条示例。 */
-    private fun testButton(): View {
-        val row = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            background = activity.glass(16f, 0x1F5FE3F3, 0x335FE3F3)
-            isClickable = true
-            pressScale(0.97f)
-            setOnClickListener { onTest() }
-        }
-        row.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            activity.dp(46),
-        )
-        val icon = ImageView(activity).apply {
-            setImageResource(R.drawable.ic_play)
-            tint(Palette.ACCENT)
-        }
-        row.addView(icon, LinearLayout.LayoutParams(activity.dp(15), activity.dp(15)))
-        row.addView(
-            activity.textView("发送测试弹幕", 14f, Palette.ACCENT, true).apply {
-                setPadding(activity.dp(8), 0, 0, 0)
-            },
-        )
         return row
     }
 
@@ -437,13 +408,13 @@ class LaunchPage(
     private fun hintCard(): View {
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            background = activity.glass(20f, 0x1417C4C4, 0x1F5FE3F3)
+            background = activity.glass(20f, 0xFFEFF5FF.toInt(), 0x1F2563EB)
             setPadding(activity.dp(16), activity.dp(14), activity.dp(16), activity.dp(14))
         }
         card.addView(activity.textView("生效范围", 12f, Palette.ACCENT, true))
         card.addView(
             activity.textView(
-                "仅「通知来源」中勾选的应用会生成弹幕；长消息以单行滚动展示，内容不会被省略。",
+                "仅「通知来源」中勾选、且通过应用过滤的应用会生成弹幕；长消息以单行滚动展示，内容不会被省略。",
                 11f,
                 Palette.MUTED,
             ).apply {

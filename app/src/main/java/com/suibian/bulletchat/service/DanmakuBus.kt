@@ -33,11 +33,10 @@ object DanmakuBus {
     fun emit(message: DanmakuMessage): Boolean {
         val view = target?.get() ?: return false
         if (Looper.myLooper() == Looper.getMainLooper()) {
-            view.push(message)
-        } else {
-            mainHandler.post {
-                if (target?.get() === view) view.push(message)
-            }
+            return view.push(message)
+        }
+        mainHandler.post {
+            if (target?.get() === view) view.push(message)
         }
         return true
     }

@@ -16,42 +16,50 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import android.os.Build
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
 import android.view.animation.DecelerateInterpolator
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import java.util.Locale
 
+/**
+ * 浅色主题：白色底 + 蓝色主色。
+ * 命名沿用旧版本，避免大范围改动；数值全部改为浅色配色。
+ */
 object Palette {
-    val BG = 0xFF06080D.toInt()
-    val BG_TOP = 0xFF0B1524.toInt()
-    val SURFACE = 0xFF0E1826.toInt()
-    val SURFACE_2 = 0xFF16222F.toInt()
-    val TEXT = 0xFFF3F7FC.toInt()
-    val TEXT_DIM = 0xFFA3B2C6.toInt()
-    val MUTED = 0xFF6B7C91.toInt()
-    val ACCENT = 0xFF5FE3F3.toInt()
-    val ACCENT_2 = 0xFF8B7CFF.toInt()
-    val ACCENT_3 = 0xFF4EA8FF.toInt()
-    val SUCCESS = 0xFF3DDC97.toInt()
-    val WARN = 0xFFFFC470.toInt()
-    val DANGER = 0xFFFF6B81.toInt()
-    val OUTLINE = 0x1FFFFFFF.toInt()
+    val BG = 0xFFF5F8FE.toInt()
+    val BG_TOP = 0xFFFFFFFF.toInt()
+    val SURFACE = 0xFFFFFFFF.toInt()
+    val SURFACE_2 = 0xFFF1F5FB.toInt()
+    val TEXT = 0xFF0E1A2B.toInt()
+    val TEXT_DIM = 0xFF46586E.toInt()
+    val MUTED = 0xFF8494A8.toInt()
+    val ACCENT = 0xFF2563EB.toInt()
+    val ACCENT_2 = 0xFF5B8DEF.toInt()
+    val ACCENT_3 = 0xFF0EA5E9.toInt()
+    val SUCCESS = 0xFF12A150.toInt()
+    val WARN = 0xFFE08A00.toInt()
+    val DANGER = 0xFFE5484D.toInt()
+    val OUTLINE = 0xFFE3EAF4.toInt()
+    val CARD = 0xFFFFFFFF.toInt()
+    val GHOST = 0xFFF0F4FA.toInt()
 }
 
 val ACCENT_GRADIENT = intArrayOf(
-    0xFF5FE3F3.toInt(),
-    0xFF63C8FF.toInt(),
-    0xFF8B7CFF.toInt(),
+    0xFF4F8CFF.toInt(),
+    0xFF2563EB.toInt(),
+    0xFF1D4ED8.toInt(),
 )
 
-/** 全屏极光背景：深色渐变 + 两处柔光，避免纯黑死板。 */
+/** 全屏背景：白到淡蓝的渐变 + 两处极淡的蓝色柔光。 */
 class AuroraDrawable(
     private val top: Int = Palette.BG_TOP,
     private val bottom: Int = Palette.BG,
@@ -64,16 +72,16 @@ class AuroraDrawable(
     override fun onBoundsChange(bounds: Rect) {
         val w = bounds.width().toFloat().coerceAtLeast(1f)
         val h = bounds.height().toFloat().coerceAtLeast(1f)
-        base.shader = LinearGradient(0f, 0f, w * 0.35f, h, top, bottom, Shader.TileMode.CLAMP)
+        base.shader = LinearGradient(0f, 0f, w * 0.45f, h, top, bottom, Shader.TileMode.CLAMP)
         glowTop.shader = RadialGradient(
-            w * 0.88f, h * 0.02f, w * 0.85f,
-            intArrayOf(0x4D5FE3F3, 0x145FE3F3, Color.TRANSPARENT),
+            w * 0.88f, h * 0.02f, w * 0.9f,
+            intArrayOf(0x332563EB, 0x0F2563EB, Color.TRANSPARENT),
             floatArrayOf(0f, 0.45f, 1f),
             Shader.TileMode.CLAMP,
         )
         glowBottom.shader = RadialGradient(
-            w * 0.02f, h * 0.58f, w * 0.8f,
-            intArrayOf(0x3D8B7CFF, 0x0F8B7CFF, Color.TRANSPARENT),
+            w * 0.02f, h * 0.62f, w * 0.85f,
+            intArrayOf(0x1F0EA5E9, 0x0A0EA5E9, Color.TRANSPARENT),
             floatArrayOf(0f, 0.42f, 1f),
             Shader.TileMode.CLAMP,
         )
@@ -98,17 +106,26 @@ fun Context.dp(value: Int): Int = dp(value.toFloat())
 fun Context.sp(value: Float): Float =
     TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, value, resources.displayMetrics)
 
-/** 玻璃拟态卡片背景。 */
+/** 白色卡片背景：浅色描边，配合 [softShadow] 形成轻微的层级感。 */
 fun Context.glass(
     radiusDp: Float = 24f,
-    fill: Int = 0xD90D1725.toInt(),
-    stroke: Int = 0x1FFFFFFF.toInt(),
+    fill: Int = 0xFFFFFFFF.toInt(),
+    stroke: Int = Palette.OUTLINE,
     strokeWidthDp: Float = 1f,
 ): GradientDrawable = GradientDrawable().apply {
     shape = GradientDrawable.RECTANGLE
     cornerRadius = dp(radiusDp).toFloat()
     setColor(fill)
     setStroke(dp(strokeWidthDp).coerceAtLeast(1), stroke)
+}
+
+/** 弱化的浅灰蓝底，用于输入框、轨道等次要区域。 */
+fun Context.ghostBackground(radiusDp: Float = 14f): GradientDrawable =
+    glass(radiusDp, Palette.GHOST, 0x00000000)
+
+/** 给白卡片加一层柔和投影（浅色主题下靠阴影区分层级）。 */
+fun View.softShadow(elevationDp: Float = 2.5f) {
+    elevation = elevationDp * resources.displayMetrics.density
 }
 
 fun Context.gradientFill(radiusDp: Float, colors: IntArray = ACCENT_GRADIENT): GradientDrawable =
@@ -123,7 +140,7 @@ fun Context.circleFill(sizeDp: Int, colors: IntArray = ACCENT_GRADIENT): Gradien
         setSize(dp(sizeDp), dp(sizeDp))
     }
 
-fun Context.rippleBackground(content: Drawable, color: Int = 0x33FFFFFF): Drawable =
+fun Context.rippleBackground(content: Drawable, color: Int = 0x1A2563EB): Drawable =
     RippleDrawable(ColorStateList.valueOf(color), content, null)
 
 fun Context.textView(
@@ -146,11 +163,26 @@ fun Context.textView(
 fun Context.eyebrow(text: String, color: Int = Palette.ACCENT): TextView =
     textView(text.uppercase(Locale.getDefault()), 10f, color, true, 0.16f)
 
-fun Context.divider(color: Int = 0x14FFFFFF): View =
+fun Context.divider(color: Int = 0x0F1B3455): View =
     View(this).apply { setBackgroundColor(color) }
 
 fun ImageView.tint(color: Int) {
     imageTintList = ColorStateList.valueOf(color)
+}
+
+/** 系统栏图标改为深色，配合白色背景。 */
+fun Window.applyLightSystemBars() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        var flags = decorView.systemUiVisibility or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            flags = flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        }
+        decorView.systemUiVisibility = flags
+    } else {
+        // Android 5.x 没有深色状态栏图标，白色背景会让图标消失，这里退回蓝色标题栏
+        statusBarColor = 0xFF1D4ED8.toInt()
+        navigationBarColor = 0xFF1D4ED8.toInt()
+    }
 }
 
 fun formatDuration(millis: Long): String {
@@ -171,8 +203,12 @@ fun formatClock(timestamp: Long): String {
         .format(java.util.Date(timestamp))
 }
 
+/** 把「0 点起的分钟数」格式化为 HH:mm。 */
+fun formatMinuteOfDay(minute: Int): String =
+    String.format(Locale.US, "%02d:%02d", (minute / 60) % 24, minute % 60)
+
 /**
- * 手绘开关：跑道 + 圆形滑块，带位移动画，视觉比系统 Switch 更贴合深色界面。
+ * 手绘开关：跑道 + 圆形滑块，带位移动画。
  */
 class ToggleView @JvmOverloads constructor(
     context: Context,
@@ -191,7 +227,7 @@ class ToggleView @JvmOverloads constructor(
 
     var onCheckedChange: ((Boolean) -> Unit)? = null
 
-    private val offTrack = 0xFF25313F.toInt()
+    private val offTrack = 0xFFD7E0EC.toInt()
     private val onTrack = Palette.ACCENT
 
     init {
@@ -241,7 +277,7 @@ class ToggleView @JvmOverloads constructor(
         canvas.drawRoundRect(pad, pad, w - pad, h - pad, radius, radius, trackPaint)
 
         if (progress > 0.02f) {
-            haloPaint.color = Color.argb((44 * progress).toInt(), 95, 227, 243)
+            haloPaint.color = Color.argb((36 * progress).toInt(), 37, 99, 235)
             canvas.drawRoundRect(0f, 0f, w, h, radius, radius, haloPaint)
         }
 
@@ -250,7 +286,7 @@ class ToggleView @JvmOverloads constructor(
         val endX = w - pad - thumbRadius - dpx(2f)
         val cx = startX + (endX - startX) * progress
 
-        thumbPaint.color = blend(0xFF8A97A6.toInt(), 0xFFFFFFFF.toInt(), progress)
+        thumbPaint.color = Color.WHITE
         canvas.drawCircle(cx, h / 2f, thumbRadius, thumbPaint)
     }
 

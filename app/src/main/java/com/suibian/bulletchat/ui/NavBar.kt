@@ -56,7 +56,7 @@ class CircleButton(context: Context) : View(context) {
         super.onSizeChanged(w, h, oldw, oldh)
         fillPaint.shader = LinearGradient(
             0f, 0f, w.toFloat(), h.toFloat(),
-            intArrayOf(0xFF6EE9F7.toInt(), 0xFF63C8FF.toInt(), 0xFF8B7CFF.toInt()),
+            intArrayOf(0xFF5B9BFF.toInt(), 0xFF2E6BF2.toInt(), 0xFF1D4ED8.toInt()),
             floatArrayOf(0f, 0.55f, 1f),
             Shader.TileMode.CLAMP,
         )
@@ -67,11 +67,11 @@ class CircleButton(context: Context) : View(context) {
         val cy = height / 2f
         val r = minOf(width, height) / 2f
 
-        haloPaint.color = if (running) 0x335FE3F3 else 0x1F5FE3F3
+        haloPaint.color = if (running) 0x332563EB else 0x1F2563EB
         canvas.drawCircle(cx, cy, r - dp(1f), haloPaint)
 
         ringPaint.strokeWidth = dp(1.2f)
-        ringPaint.color = if (running) 0x885FE3F3.toInt() else 0x445FE3F3
+        ringPaint.color = if (running) 0x882563EB.toInt() else 0x442563EB
         canvas.drawCircle(cx, cy, r - dp(2f), ringPaint)
 
         canvas.drawCircle(cx, cy, r - dp(9f), fillPaint)
@@ -147,7 +147,8 @@ class NavBar(
         clipToPadding = false
 
         val base = View(context).apply {
-            background = context.glass(30f, 0xF20A1420.toInt(), 0x26FFFFFF)
+            background = context.glass(30f, 0xF7FFFFFF.toInt(), 0xFFE3EAF4.toInt())
+            softShadow(8f)
             elevation = 0f
         }
         addView(

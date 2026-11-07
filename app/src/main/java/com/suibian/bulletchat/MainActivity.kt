@@ -14,10 +14,13 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.suibian.bulletchat.data.FilterMode
 import com.suibian.bulletchat.data.SettingsStore
 import com.suibian.bulletchat.data.StatsStore
 import com.suibian.bulletchat.service.OverlayService
+import com.suibian.bulletchat.service.QuickTileService
 import com.suibian.bulletchat.ui.AuroraDrawable
+import com.suibian.bulletchat.ui.applyLightSystemBars
 import com.suibian.bulletchat.ui.HomePage
 import com.suibian.bulletchat.ui.LaunchPage
 import com.suibian.bulletchat.ui.NavBar
@@ -66,14 +69,15 @@ class MainActivity : Activity() {
             activity = this,
             onToggle = { toggleService() },
             onPermissionClick = { openPermission(it) },
-            onTest = { sendTestDanmaku() },
         )
         settings = SettingsPage(
             activity = this,
-            onOpenAppPicker = { startActivity(Intent(this, AppPickerActivity::class.java)) },
+            onOpenAppPicker = { openPicker(AppPickerActivity.TARGET_SOURCE) },
+            onOpenFilterPicker = { mode -> openFilterPicker(mode) },
             onOpenChangelog = { startActivity(Intent(this, ChangelogActivity::class.java)) },
             onCheckUpdate = { checkUpdate(manual = true) },
             onOpenPermission = { openPermission(it) },
+            onSendTest = { sendTestDanmaku() },
             onSettingsChanged = { refreshAll() },
         )
 
@@ -103,7 +107,9 @@ class MainActivity : Activity() {
         setContentView(root)
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+            )
             content.setPadding(0, bars.top, 0, dp(96) + bars.bottom)
             (nav.layoutParams as FrameLayout.LayoutParams).bottomMargin = bars.bottom + dp(6)
             nav.requestLayout()
@@ -141,6 +147,7 @@ class MainActivity : Activity() {
     private fun applyEdgeToEdge() {
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
+        window.applyLightSystemBars()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
@@ -154,7 +161,9 @@ class MainActivity : Activity() {
     }
 
     private fun select(target: Int) {
-        if (target == current && pageViews[target].visibility == View.VISIBLE) {
+        val shown = pageViews[target]
+        // 快速连点时动画可能被 cancel，页面停在 alpha=0；此时仍需重新播放，不能直接返回
+        if (target == current && shown.visibility == View.VISIBLE && shown.alpha >= 0.999f) {
             nav.setSelected(target)
             return
         }
@@ -233,6 +242,9 @@ class MainActivity : Activity() {
         launch.refresh()
         settings.refresh()
         nav.setFabRunning(SettingsStore.settings.value.enabled)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            QuickTileService.requestRefresh(this)
+        }
     }
 
     private fun toggleService() {
@@ -261,9 +273,35 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
         SettingsStore.update({ it.copy(enabled = true) })
-        OverlayService.start(this)
+        if (!OverlayService.start(this)) {
+            SettingsStore.update({ it.copy(enabled = false) })
+            refreshAll()
+            toast("启动失败，请检查系统是否限制了后台运行")
+            return
+        }
         refreshAll()
         toast("弹幕已开启")
+    }
+
+    private fun openPicker(target: String) {
+        startActivity(
+            Intent(this, AppPickerActivity::class.java)
+                .putExtra(AppPickerActivity.EXTRA_TARGET, target),
+        )
+    }
+
+    private fun openFilterPicker(mode: FilterMode) {
+        if (mode == FilterMode.OFF) {
+            toast("请先选择白名单或黑名单模式")
+            return
+        }
+        openPicker(
+            if (mode == FilterMode.WHITELIST) {
+                AppPickerActivity.TARGET_WHITELIST
+            } else {
+                AppPickerActivity.TARGET_BLACKLIST
+            },
+        )
     }
 
     private fun sendTestDanmaku() {

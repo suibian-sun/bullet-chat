@@ -7,8 +7,12 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.suibian.bulletchat.data.Changelog
 import com.suibian.bulletchat.ui.AuroraDrawable
+import com.suibian.bulletchat.ui.applyLightSystemBars
+import com.suibian.bulletchat.ui.softShadow
 import com.suibian.bulletchat.ui.Palette
 import com.suibian.bulletchat.ui.dp
 import com.suibian.bulletchat.ui.eyebrow
@@ -22,8 +26,8 @@ class ChangelogActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Palette.BG
-        window.navigationBarColor = Palette.BG
+        window.setBackgroundDrawable(AuroraDrawable())
+        window.applyLightSystemBars()
         setContentView(build())
     }
 
@@ -54,6 +58,13 @@ class ChangelogActivity : Activity() {
         )
         topBar.addView(textView("v${BuildConfig.VERSION_NAME}", 12f, Palette.ACCENT, true))
         root.addView(topBar)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+            )
+            view.setPadding(0, bars.top, 0, bars.bottom)
+            insets
+        }
 
         val scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -103,10 +114,11 @@ class ChangelogActivity : Activity() {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = glass(
-                24f,
-                if (latest) 0xE60F2030.toInt() else 0xD90D1725.toInt(),
-                if (latest) 0x335FE3F3 else 0x14FFFFFF,
+                22f,
+                if (latest) 0xFFEFF5FF.toInt() else 0xFFFFFFFF.toInt(),
+                if (latest) 0x332563EB else Palette.OUTLINE,
             )
+            softShadow(if (latest) 3f else 1.5f)
             setPadding(dp(18), dp(16), dp(18), dp(16))
         }
 
@@ -114,12 +126,12 @@ class ChangelogActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val badge = textView("v$version", 12f, if (latest) 0xFF06202A.toInt() else Palette.TEXT_DIM, true).apply {
+        val badge = textView("v$version", 12f, if (latest) 0xFFFFFFFF.toInt() else Palette.TEXT_DIM, true).apply {
             setPadding(dp(10), dp(5), dp(10), dp(5))
             background = if (latest) {
                 gradientChip()
             } else {
-                glass(10f, 0xFF1A2634.toInt(), 0x1FFFFFFF)
+                glass(10f, Palette.GHOST, 0x00000000)
             }
         }
         header.addView(badge)
@@ -176,7 +188,7 @@ class ChangelogActivity : Activity() {
 
     private fun gradientChip() = android.graphics.drawable.GradientDrawable(
         android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xFF6EE9F7.toInt(), 0xFF8B7CFF.toInt()),
+        intArrayOf(0xFF4F8CFF.toInt(), 0xFF1D4ED8.toInt()),
     ).apply {
         shape = android.graphics.drawable.GradientDrawable.RECTANGLE
         cornerRadius = dp(10).toFloat()

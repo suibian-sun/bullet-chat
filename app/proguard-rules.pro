@@ -13,3 +13,13 @@
 
 # 反射调用的自由窗口 API 依赖参数类型，保留方法签名即可（平台类不受影响）
 -dontwarn android.app.ActivityOptions
+
+# 快捷设置磁贴由系统绑定
+-keep class com.suibian.bulletchat.service.QuickTileService { *; }
+
+# 新增枚举同样通过 valueOf 字符串还原
+-keepclassmembers enum com.suibian.bulletchat.data.FilterMode { *; }
+-keepclassmembers enum com.suibian.bulletchat.data.CardStyle { *; }
+-keepclassmembers enum com.suibian.bulletchat.data.ContentMode { *; }
+-keepclassmembers enum com.suibian.bulletchat.data.KeywordMode { *; }
+-keepclassmembers enum com.suibian.bulletchat.data.DisplayOrientation { *; }

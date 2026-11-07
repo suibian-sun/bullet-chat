@@ -172,8 +172,9 @@ class HomePage(private val activity: Activity) {
             orientation = LinearLayout.VERTICAL
             background = activity.gradientFill(
                 26f,
-                intArrayOf(0xFF12303F.toInt(), 0xFF111C33.toInt(), 0xFF191A38.toInt()),
+                intArrayOf(0xFFE9F1FF.toInt(), 0xFFF7FAFF.toInt(), 0xFFEFF6FF.toInt()),
             )
+            softShadow(3f)
             setPadding(activity.dp(20), activity.dp(18), activity.dp(20), activity.dp(20))
         }
 
@@ -240,7 +241,8 @@ class HomePage(private val activity: Activity) {
     ): TextView {
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            background = activity.glass(20f, 0xB30D1725.toInt(), 0x14FFFFFF)
+            background = activity.glass(20f, 0xFFFFFFFF.toInt(), 0xFFE7EDF7.toInt())
+            softShadow(2f)
             setPadding(activity.dp(16), activity.dp(14), activity.dp(16), activity.dp(15))
         }
         val head = LinearLayout(activity).apply {
@@ -278,7 +280,8 @@ class HomePage(private val activity: Activity) {
     private fun recentCard(): View {
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            background = activity.glass(24f)
+            background = activity.glass(22f)
+            softShadow(2f)
             setPadding(activity.dp(18), activity.dp(16), activity.dp(18), activity.dp(16))
         }
 
@@ -317,7 +320,7 @@ class HomePage(private val activity: Activity) {
     private fun tipCard(): View {
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            background = activity.glass(20f, 0x14FFC470, 0x33FFC470)
+            background = activity.glass(20f, 0xFFFFF7E8.toInt(), 0x33E08A00)
             setPadding(activity.dp(16), activity.dp(14), activity.dp(16), activity.dp(14))
         }
         card.addView(
