@@ -162,7 +162,7 @@ class DanmakuPreviewView @JvmOverloads constructor(
             canvas.drawRoundRect(rect, radius, radius, borderPaint)
 
             if (style == CardStyle.CARD) {
-                accentPaint.color = 0xFF2563EB.toInt()
+                accentPaint.color = Color.argb(fillAlpha, 37, 99, 235)
                 val inset = 6f * density
                 barRect.set(
                     rect.left + inset,

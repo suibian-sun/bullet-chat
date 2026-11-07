@@ -367,12 +367,13 @@ class DanmakuView @JvmOverloads constructor(
                 bgPaint.color = Color.argb(fillAlpha, 255, 255, 255)
                 canvas.drawRoundRect(rect, radius, radius, bgPaint)
 
-                borderPaint.color = Color.argb((itemAlpha * 0.22f).toInt(), 30, 64, 120)
+                // 描边与强调条跟着卡片透明度走：0% 时整张卡片应完全消失
+                borderPaint.color = Color.argb((fillAlpha * 0.22f).toInt(), 30, 64, 120)
                 canvas.drawRoundRect(rect, radius, radius, borderPaint)
 
                 if (style == CardStyle.CARD) {
                     // 左侧强调条，接近系统通知的视觉语言
-                    accentBarPaint.color = Color.argb(itemAlpha, 37, 99, 235)
+                    accentBarPaint.color = Color.argb(fillAlpha, 37, 99, 235)
                     val inset = 6f * density
                     innerRect.set(
                         rect.left + inset,
@@ -383,9 +384,15 @@ class DanmakuView @JvmOverloads constructor(
                     canvas.drawRoundRect(innerRect, 2f * density, 2f * density, accentBarPaint)
                 }
 
-                if (item.pressed) {
-                    canvas.drawRoundRect(rect, radius, radius, pressedPaint)
-                }
+            }
+
+            if (item.pressed) {
+                canvas.drawRoundRect(
+                    rect,
+                    if (style == CardStyle.MINIMAL) 10f * density else radius,
+                    if (style == CardStyle.MINIMAL) 10f * density else radius,
+                    pressedPaint,
+                )
             }
 
             var contentX = item.x + 12f * density
