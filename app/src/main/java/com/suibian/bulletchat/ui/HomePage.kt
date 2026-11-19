@@ -327,6 +327,7 @@ class HomePage(private val activity: Activity) {
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             background = activity.glass(20f, 0xFFFFF7E8.toInt(), 0x33E08A00)
+            softShadow(1.5f)
             setPadding(activity.dp(16), activity.dp(14), activity.dp(16), activity.dp(14))
         }
         card.addView(

@@ -326,6 +326,7 @@ class LaunchPage(
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             background = activity.glass(22f)
+            softShadow(2f)
             setPadding(activity.dp(18), activity.dp(15), activity.dp(18), activity.dp(15))
         }
 
@@ -370,6 +371,7 @@ class LaunchPage(
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             background = activity.glass(24f)
+            softShadow(2f)
             setPadding(activity.dp(18), activity.dp(8), activity.dp(18), activity.dp(8))
         }
         val titles = listOf("通知使用权", "悬浮窗权限", "免打扰权限")
@@ -414,6 +416,7 @@ class LaunchPage(
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             background = activity.glass(20f, 0xFFEFF5FF.toInt(), 0x1F2563EB)
+            softShadow(1.5f)
             setPadding(activity.dp(16), activity.dp(14), activity.dp(16), activity.dp(14))
         }
         card.addView(activity.textView("生效范围", 12f, Palette.ACCENT, true))
