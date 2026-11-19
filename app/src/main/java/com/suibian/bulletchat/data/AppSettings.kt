@@ -47,6 +47,20 @@ enum class KeywordMode(val label: String) {
 }
 
 /**
+ * 卡片底色方案。
+ * 浅色卡在浅色应用上容易糊在一起，深色卡在深色应用上同理，
+ * 因此提供手动切换与「跟随系统深色模式」。
+ */
+enum class CardTheme(val label: String, val desc: String) {
+    LIGHT("浅色卡片", "白色底 + 深色文字，适合浅色界面"),
+    DARK("深色卡片", "深色底 + 浅色文字，适合深色界面与视频"),
+    AUTO("跟随系统", "系统开启深色模式时自动使用深色卡片"),
+}
+
+/** 每分钟最多显示多少条弹幕，0 表示不限制。 */
+val THROTTLE_OPTIONS = intArrayOf(0, 30, 60, 120)
+
+/**
  * 应用设置，全部保存在本地，不联网。
  */
 data class AppSettings(
@@ -69,10 +83,13 @@ data class AppSettings(
     val filterPackages: Set<String> = emptySet(),
     val cardStyle: CardStyle = CardStyle.BUBBLE,
     val cardAlphaPercent: Int = 92,
+    val cardTheme: CardTheme = CardTheme.LIGHT,
     val contentMode: ContentMode = ContentMode.TITLE_AND_TEXT,
     val quietEnabled: Boolean = false,
     val quietStartMinute: Int = 23 * 60,
     val quietEndMinute: Int = 7 * 60,
+    /** 每分钟最多转发条数；0 表示不限。 */
+    val throttlePerMinute: Int = 0,
 ) {
     /**
      * 是否允许该应用的通知进入弹幕。
@@ -109,12 +126,31 @@ data class AppSettings(
         }
     }
 
+    /** 按当前配置与系统深色模式解析出实际使用的卡片底色。 */
+    fun resolveDark(uiMode: Int): Boolean = when (cardTheme) {
+        CardTheme.LIGHT -> false
+        CardTheme.DARK -> true
+        CardTheme.AUTO ->
+            (uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    }
+
     companion object {
         /** 关键词按中英文逗号、分号、顿号与换行分隔。 */
-        fun parseKeywords(raw: String): List<String> =
-            raw.split(Regex("[,，;；、\\n]+"))
+        private val SPLITTER = Regex("[,，;；、\\n]+")
+
+        // 通知可能每秒来好几条，缓存上一次的解析结果，避免反复编译正则
+        private var cachedRaw: String = ""
+        private var cachedKeywords: List<String> = emptyList()
+
+        fun parseKeywords(raw: String): List<String> {
+            if (raw == cachedRaw) return cachedKeywords
+            val parsed = raw.split(SPLITTER)
                 .map { it.trim().lowercase() }
                 .filter { it.isNotEmpty() }
+            cachedRaw = raw
+            cachedKeywords = parsed
+            return parsed
+        }
     }
 }
 
@@ -151,6 +187,8 @@ object SettingsStore {
     private const val KEY_FILTER_PACKAGES = "filter_packages"
     private const val KEY_CARD_STYLE = "card_style"
     private const val KEY_CARD_ALPHA = "card_alpha_percent"
+    private const val KEY_CARD_THEME = "card_theme"
+    private const val KEY_THROTTLE = "throttle_per_minute"
     private const val KEY_CONTENT_MODE = "content_mode"
     private const val KEY_QUIET_ENABLED = "quiet_enabled"
     private const val KEY_QUIET_START = "quiet_start"
@@ -198,10 +236,12 @@ object SettingsStore {
                 ?: defaults.filterPackages,
             cardStyle = readEnum(KEY_CARD_STYLE, defaults.cardStyle),
             cardAlphaPercent = prefs.getInt(KEY_CARD_ALPHA, defaults.cardAlphaPercent),
+            cardTheme = readEnum(KEY_CARD_THEME, defaults.cardTheme),
             contentMode = readEnum(KEY_CONTENT_MODE, defaults.contentMode),
             quietEnabled = prefs.getBoolean(KEY_QUIET_ENABLED, defaults.quietEnabled),
             quietStartMinute = prefs.getInt(KEY_QUIET_START, defaults.quietStartMinute),
             quietEndMinute = prefs.getInt(KEY_QUIET_END, defaults.quietEndMinute),
+            throttlePerMinute = prefs.getInt(KEY_THROTTLE, defaults.throttlePerMinute),
         )
     }
 
@@ -238,10 +278,12 @@ object SettingsStore {
             putStringSet(KEY_FILTER_PACKAGES, HashSet(value.filterPackages))
             putString(KEY_CARD_STYLE, value.cardStyle.name)
             putInt(KEY_CARD_ALPHA, value.cardAlphaPercent)
+            putString(KEY_CARD_THEME, value.cardTheme.name)
             putString(KEY_CONTENT_MODE, value.contentMode.name)
             putBoolean(KEY_QUIET_ENABLED, value.quietEnabled)
             putInt(KEY_QUIET_START, value.quietStartMinute)
             putInt(KEY_QUIET_END, value.quietEndMinute)
+            putInt(KEY_THROTTLE, value.throttlePerMinute)
             apply()
         }
     }

@@ -5,6 +5,7 @@
 -keep class com.suibian.bulletchat.MainActivity { *; }
 -keep class com.suibian.bulletchat.AppPickerActivity { *; }
 -keep class com.suibian.bulletchat.ChangelogActivity { *; }
+-keep class com.suibian.bulletchat.HistoryActivity { *; }
 
 # 设置项枚举通过 valueOf 字符串还原
 -keepclassmembers enum com.suibian.bulletchat.data.DisplayOrientation {
@@ -22,4 +23,5 @@
 -keepclassmembers enum com.suibian.bulletchat.data.CardStyle { *; }
 -keepclassmembers enum com.suibian.bulletchat.data.ContentMode { *; }
 -keepclassmembers enum com.suibian.bulletchat.data.KeywordMode { *; }
+-keepclassmembers enum com.suibian.bulletchat.data.CardTheme { *; }
 -keepclassmembers enum com.suibian.bulletchat.data.DisplayOrientation { *; }

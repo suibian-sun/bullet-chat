@@ -48,6 +48,13 @@ class DanmakuPreviewView @JvmOverloads constructor(
             invalidate()
         }
 
+    /** 深色卡片：深底 + 浅字，用于预览「深色卡片 / 跟随系统」的效果。 */
+    var dark: Boolean = false
+        set(value) {
+            field = value
+            invalidate()
+        }
+
     private val density = resources.displayMetrics.density
     private val spToPx = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_SP,
@@ -92,13 +99,22 @@ class DanmakuPreviewView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        // 模拟一块浅色应用界面，白色弹幕卡才有对比
-        backdropPaint.shader = LinearGradient(
-            0f, 0f, width.toFloat(), height.toFloat(),
-            intArrayOf(0xFFEDF2FB.toInt(), 0xFFE6EEFB.toInt()),
-            null,
-            Shader.TileMode.CLAMP,
-        )
+        // 模拟一块应用界面：浅色卡片配浅色底，深色卡片配深色底，直观看出对比度
+        backdropPaint.shader = if (dark) {
+            LinearGradient(
+                0f, 0f, width.toFloat(), height.toFloat(),
+                intArrayOf(0xFF1B2434.toInt(), 0xFF121A28.toInt()),
+                null,
+                Shader.TileMode.CLAMP,
+            )
+        } else {
+            LinearGradient(
+                0f, 0f, width.toFloat(), height.toFloat(),
+                intArrayOf(0xFFEDF2FB.toInt(), 0xFFE6EEFB.toInt()),
+                null,
+                Shader.TileMode.CLAMP,
+            )
+        }
         canvas.drawRoundRect(
             0f, 0f, width.toFloat(), height.toFloat(),
             16f * density, 16f * density, backdropPaint,
@@ -106,7 +122,9 @@ class DanmakuPreviewView @JvmOverloads constructor(
 
         val textSize = 16f * spToPx
         textPaint.textSize = textSize
+        textPaint.color = if (dark) 0xFFF2F6FF.toInt() else 0xFF101B2D.toInt()
         haloPaint.textSize = textSize
+        haloPaint.color = if (dark) 0xFF10131A.toInt() else Color.WHITE
         haloPaint.strokeWidth = (textSize * 0.20f).coerceIn(2f, 5f * density)
 
         var metrics = textPaint.fontMetrics
@@ -144,7 +162,11 @@ class DanmakuPreviewView @JvmOverloads constructor(
 
         if (style != CardStyle.MINIMAL) {
             if (fillAlpha > 60) {
-                shadowPaint.color = Color.argb((fillAlpha * 0.10f).toInt(), 15, 40, 80)
+                shadowPaint.color = if (dark) {
+                    Color.argb((fillAlpha * 0.32f).toInt(), 0, 0, 0)
+                } else {
+                    Color.argb((fillAlpha * 0.10f).toInt(), 15, 40, 80)
+                }
                 canvas.drawRoundRect(
                     rect.left,
                     rect.top + 1.5f * density,
@@ -155,14 +177,26 @@ class DanmakuPreviewView @JvmOverloads constructor(
                     shadowPaint,
                 )
             }
-            cardPaint.color = Color.argb(fillAlpha, 255, 255, 255)
+            cardPaint.color = if (dark) {
+                Color.argb(fillAlpha, 20, 26, 38)
+            } else {
+                Color.argb(fillAlpha, 255, 255, 255)
+            }
             canvas.drawRoundRect(rect, radius, radius, cardPaint)
 
-            borderPaint.color = Color.argb((fillAlpha * 0.22f).toInt(), 30, 64, 120)
+            borderPaint.color = if (dark) {
+                Color.argb((fillAlpha * 0.22f).toInt(), 255, 255, 255)
+            } else {
+                Color.argb((fillAlpha * 0.22f).toInt(), 30, 64, 120)
+            }
             canvas.drawRoundRect(rect, radius, radius, borderPaint)
 
             if (style == CardStyle.CARD) {
-                accentPaint.color = Color.argb(fillAlpha, 37, 99, 235)
+                accentPaint.color = if (dark) {
+                    Color.argb(fillAlpha, 96, 150, 255)
+                } else {
+                    Color.argb(fillAlpha, 37, 99, 235)
+                }
                 val inset = 6f * density
                 barRect.set(
                     rect.left + inset,

@@ -42,7 +42,14 @@
         <activity
             android:name=".AppPickerActivity"
             android:exported="false"
-            android:label="通知来源"
+            android:label="选择应用"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.BulletChat" />
+
+        <activity
+            android:name=".HistoryActivity"
+            android:exported="false"
+            android:label="消息记录"
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.BulletChat" />
 

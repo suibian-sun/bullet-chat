@@ -300,6 +300,11 @@ class LaunchPage(
             gravity = Gravity.CENTER
             setPadding(0, activity.dp(8), 0, 0)
             setLineSpacing(0f, 1.3f)
+            // 必须显式撑满：WRAP_CONTENT 下文本块只有自身宽度，居中会失效、看起来左对齐
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
         }
         root.addView(statusSub)
 
@@ -398,7 +403,7 @@ class LaunchPage(
             if (index < titles.size - 1) {
                 card.addView(
                     activity.divider(),
-                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1),
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(1)),
                 )
             }
         }

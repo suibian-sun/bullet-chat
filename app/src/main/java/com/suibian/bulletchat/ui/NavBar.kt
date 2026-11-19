@@ -148,8 +148,8 @@ class NavBar(
 
         val base = View(context).apply {
             background = context.glass(30f, 0xF7FFFFFF.toInt(), 0xFFE3EAF4.toInt())
-            softShadow(8f)
-            elevation = 0f
+            // 底座保留阴影：之前把它压到 0dp，导航条完全贴在背景上，白底页面里没有层级
+            softShadow(6f)
         }
         addView(
             base,
@@ -157,13 +157,15 @@ class NavBar(
                 gravity = Gravity.BOTTOM
                 leftMargin = dp(14)
                 rightMargin = dp(14)
-                bottomMargin = dp(4)
+                bottomMargin = dp(6)
             },
         )
 
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            // 图标行必须比底座高，否则会被底座盖住
+            elevation = dp(8f).toFloat()
         }
         homeCell = buildCell(R.drawable.ic_nav_home, "主页") { onSelect(0) }
         settingsCell = buildCell(R.drawable.ic_nav_settings, "设置") { onSelect(2) }
@@ -178,12 +180,12 @@ class NavBar(
                 gravity = Gravity.BOTTOM
                 leftMargin = dp(14)
                 rightMargin = dp(14)
-                bottomMargin = dp(4)
+                bottomMargin = dp(6)
             },
         )
 
         fab = CircleButton(context).apply {
-            elevation = dp(10f).toFloat()
+            elevation = dp(14f).toFloat()
             setOnClickListener { onSelect(1) }
         }
         // 圆钮浮在底座之上，向上凸出，形成悬浮式启动按钮

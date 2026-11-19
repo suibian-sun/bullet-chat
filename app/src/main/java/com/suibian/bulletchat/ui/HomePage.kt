@@ -265,6 +265,10 @@ class HomePage(private val activity: Activity) {
         val value = activity.textView(initial, 26f, Palette.TEXT, true).apply {
             setPadding(0, activity.dp(9), 0, 0)
             letterSpacing = -0.02f
+            // 数字变大（上千条 / 上百小时）时不能换行，否则会把卡片撑成两行
+            maxLines = 1
+            isSingleLine = true
+            ellipsize = android.text.TextUtils.TruncateAt.END
         }
         card.addView(value)
 
@@ -310,8 +314,10 @@ class HomePage(private val activity: Activity) {
 
         recentText = activity.textView("", 12f, Palette.TEXT_DIM).apply {
             setPadding(0, activity.dp(7), 0, 0)
-            maxLines = 1
+            // 一条消息常常不止一行，单行会把内容切掉，这里放宽到两行
+            maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
+            setLineSpacing(0f, 1.25f)
         }
         card.addView(recentText)
         return card

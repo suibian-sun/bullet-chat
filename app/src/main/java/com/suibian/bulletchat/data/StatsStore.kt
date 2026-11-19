@@ -125,4 +125,22 @@ object StatsStore {
         if (stats.sessionStart <= 0L) return 0L
         return (System.currentTimeMillis() - stats.sessionStart).coerceIn(0L, 12L * 60 * 60 * 1000)
     }
+
+    /**
+     * 清空累计数据，但保留当前会话起点：
+     * 用户点「清空」后仍希望看到本次已经运行多久，而不是归零重来。
+     */
+    @Synchronized
+    fun reset() {
+        if (!initialized) return
+        prefs.edit()
+            .putInt(KEY_TOTAL, 0)
+            .putInt(KEY_TODAY, 0)
+            .putLong(KEY_TOTAL_RUN, 0L)
+            .putString(KEY_LAST_APP, "")
+            .putString(KEY_LAST_TITLE, "")
+            .putString(KEY_LAST_TEXT, "")
+            .putLong(KEY_LAST_TIME, 0L)
+            .apply()
+    }
 }

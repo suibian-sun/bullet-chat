@@ -113,6 +113,7 @@ class OverlayService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private val applyLayout = Runnable { updateOverlay() }
     private var settings: AppSettings = AppSettings()
+    private var lastOverlayKey: String = ""
     private var receiverRegistered = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val density: Float by lazy { resources.displayMetrics.density }
@@ -341,12 +342,32 @@ class OverlayService : Service() {
                 }
                 if (danmakuView == null) {
                     attachOverlay()
-                } else {
-                    handler.removeCallbacks(applyLayout)
-                    handler.postDelayed(applyLayout, 60L)
+                    lastOverlayKey = overlayKey(value)
+                    return@collect
                 }
+                // 只有真正影响悬浮层的字段变化才重建窗口：
+                // 打字改关键词、开关安静时段等都会触发设置流，但没必要每敲一下都重排窗口
+                val key = overlayKey(value)
+                if (key == lastOverlayKey) return@collect
+                lastOverlayKey = key
+                handler.removeCallbacks(applyLayout)
+                handler.postDelayed(applyLayout, 60L)
             }
         }
+    }
+
+    /** 影响悬浮层几何 / 绘制的字段签名。 */
+    private fun overlayKey(value: AppSettings): String = buildString {
+        append(value.fontSp).append('|')
+        append(value.laneCount).append('|')
+        append(value.positionPercent).append('|')
+        append(value.alphaPercent).append('|')
+        append(value.cardAlphaPercent).append('|')
+        append(value.cardStyle).append('|')
+        append(value.cardTheme).append('|')
+        append(value.showAppIcon).append('|')
+        append(value.clickToOpen).append('|')
+        append(value.displayOrientation)
     }
 
     private fun startAsForeground() {
@@ -482,7 +503,7 @@ class OverlayService : Service() {
             Triple(
                 ChatPackages.WECHAT,
                 "妈妈",
-                "这是一条很长的测试消息，用来确认弹幕不会截断内容，而是自动换行完整显示出来，位置、透明度、字号和速度都可以在设置里调整。",
+                "这是一条很长的测试消息，用来确认弹幕会以单行滚动的方式完整展示，不换行也不截断；位置、透明度、字号和速度都可以在设置里调整。",
             ),
         )
         view.whenReady {
@@ -613,6 +634,7 @@ class OverlayService : Service() {
         clickable = clickToOpen,
         cardStyle = cardStyle,
         cardAlphaPercent = cardAlphaPercent,
+        cardDark = resolveDark(resources.configuration.uiMode),
     )
 
     /** 长按弹幕：把完整内容复制到剪贴板，方便回到应用里粘贴查看。 */

@@ -157,7 +157,7 @@
   .chip.off { color: #46586E; background: #F0F4FA; }
 
   /* 弹幕预览 */
-  .preview { margin-top: 10px; height: 62px; border-radius: 16px; position: relative; overflow: hidden;
+  .preview { margin-top: 8px; height: 56px; border-radius: 16px; position: relative; overflow: hidden;
     background: linear-gradient(135deg,#EDF2FB,#E6EEFB); }
   .preview .pill { position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
     display: flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 15px;
@@ -381,6 +381,12 @@ const settings = `
           <div class="chip on">胶囊气泡</div>
           <div class="chip off">通知卡片</div>
           <div class="chip off">极简文字</div>
+        </div>
+        <div style="font-size:13px;color:#46586E;padding-top:14px">卡片主题</div>
+        <div class="chips">
+          <div class="chip on">浅色卡片</div>
+          <div class="chip off">深色卡片</div>
+          <div class="chip off">跟随系统</div>
         </div>
         <div class="slider">
           <div class="top"><div class="name">卡片透明度</div><div class="val">92%</div></div>

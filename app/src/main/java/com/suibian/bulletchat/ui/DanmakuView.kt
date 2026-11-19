@@ -45,6 +45,8 @@ class DanmakuView @JvmOverloads constructor(
         val clickable: Boolean = false,
         val cardStyle: CardStyle = CardStyle.BUBBLE,
         val cardAlphaPercent: Int = 92,
+        /** true 使用深色卡片（深色底 + 浅色文字），适配深色应用与视频。 */
+        val cardDark: Boolean = false,
     )
 
     private class Item(
@@ -155,12 +157,19 @@ class DanmakuView @JvmOverloads constructor(
         cardAlpha = (config.cardAlphaPercent.coerceIn(0, 100) / 100f * 255f).toInt()
         val textSize = config.fontSp * spToPx
         textPaint.textSize = textSize
+        // 先定颜色再定 alpha：设置 color 会把 alpha 重置为 255
+        textPaint.color = if (config.cardDark) 0xFFF2F6FF.toInt() else 0xFF101B2D.toInt()
         textPaint.alpha = alpha
         haloPaint.textSize = textSize
         haloPaint.strokeWidth = (textSize * 0.20f).coerceIn(2f, 5f * density)
+        haloPaint.color = if (config.cardDark) 0xFF10131A.toInt() else Color.WHITE
         haloPaint.alpha = alpha
         iconPaint.alpha = alpha
-        pressedPaint.color = Color.argb((alpha * 0.9f).toInt(), 37, 99, 235)
+        pressedPaint.color = if (config.cardDark) {
+            Color.argb((alpha * 0.95f).toInt(), 138, 180, 255)
+        } else {
+            Color.argb((alpha * 0.9f).toInt(), 37, 99, 235)
+        }
     }
 
     /**
@@ -350,9 +359,13 @@ class DanmakuView @JvmOverloads constructor(
             if (style != CardStyle.MINIMAL) {
                 val fillAlpha = (cardAlpha * item.appear).toInt().coerceIn(0, 255)
 
-                // 轻投影：白色卡片放在任意应用上都需要一点边界感
+                // 轻投影：卡片放在任意应用上都需要一点边界感
                 if (fillAlpha > 60) {
-                    shadowPaint.color = Color.argb((itemAlpha * 0.10f).toInt(), 15, 40, 80)
+                    shadowPaint.color = if (config.cardDark) {
+                        Color.argb((itemAlpha * 0.28f).toInt(), 0, 0, 0)
+                    } else {
+                        Color.argb((itemAlpha * 0.10f).toInt(), 15, 40, 80)
+                    }
                     canvas.drawRoundRect(
                         rect.left,
                         rect.top + 1.5f * density,
@@ -364,16 +377,28 @@ class DanmakuView @JvmOverloads constructor(
                     )
                 }
 
-                bgPaint.color = Color.argb(fillAlpha, 255, 255, 255)
+                bgPaint.color = if (config.cardDark) {
+                    Color.argb(fillAlpha, 20, 26, 38)
+                } else {
+                    Color.argb(fillAlpha, 255, 255, 255)
+                }
                 canvas.drawRoundRect(rect, radius, radius, bgPaint)
 
                 // 描边与强调条跟着卡片透明度走：0% 时整张卡片应完全消失
-                borderPaint.color = Color.argb((fillAlpha * 0.22f).toInt(), 30, 64, 120)
+                borderPaint.color = if (config.cardDark) {
+                    Color.argb((fillAlpha * 0.22f).toInt(), 255, 255, 255)
+                } else {
+                    Color.argb((fillAlpha * 0.22f).toInt(), 30, 64, 120)
+                }
                 canvas.drawRoundRect(rect, radius, radius, borderPaint)
 
                 if (style == CardStyle.CARD) {
                     // 左侧强调条，接近系统通知的视觉语言
-                    accentBarPaint.color = Color.argb(fillAlpha, 37, 99, 235)
+                    accentBarPaint.color = if (config.cardDark) {
+                        Color.argb(fillAlpha, 96, 150, 255)
+                    } else {
+                        Color.argb(fillAlpha, 37, 99, 235)
+                    }
                     val inset = 6f * density
                     innerRect.set(
                         rect.left + inset,
@@ -401,8 +426,12 @@ class DanmakuView @JvmOverloads constructor(
                 val iconTop = item.top + (item.height - item.iconSize) / 2f
                 iconRect.set(contentX, iconTop, contentX + item.iconSize, iconTop + item.iconSize)
                 if (style == CardStyle.MINIMAL) {
-                    // 极简模式没有卡片底色，给图标垫一层白色圆角，避免在深色应用上看不清
-                    bgPaint.color = Color.argb((itemAlpha * 0.86f).toInt(), 255, 255, 255)
+                    // 极简模式没有卡片底色，给图标垫一层底色，避免与背景混在一起
+                    bgPaint.color = if (config.cardDark) {
+                        Color.argb((itemAlpha * 0.55f).toInt(), 0, 0, 0)
+                    } else {
+                        Color.argb((itemAlpha * 0.86f).toInt(), 255, 255, 255)
+                    }
                     canvas.drawRoundRect(iconRect, 5f * density, 5f * density, bgPaint)
                 }
                 iconPaint.alpha = itemAlpha

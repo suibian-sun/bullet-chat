@@ -4,6 +4,9 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.TimePickerDialog
 import android.content.res.ColorStateList
+import android.content.res.Configuration
+import android.os.Handler
+import android.os.Looper
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -21,11 +24,15 @@ import com.suibian.bulletchat.BuildConfig
 import com.suibian.bulletchat.R
 import com.suibian.bulletchat.data.AppSettings
 import com.suibian.bulletchat.data.CardStyle
+import com.suibian.bulletchat.data.CardTheme
 import com.suibian.bulletchat.data.ContentMode
 import com.suibian.bulletchat.data.DisplayOrientation
 import com.suibian.bulletchat.data.FilterMode
+import com.suibian.bulletchat.data.HistoryStore
 import com.suibian.bulletchat.data.KeywordMode
 import com.suibian.bulletchat.data.SettingsStore
+import com.suibian.bulletchat.data.StatsStore
+import com.suibian.bulletchat.data.THROTTLE_OPTIONS
 import com.suibian.bulletchat.util.Permissions
 
 /**
@@ -36,6 +43,7 @@ class SettingsPage(
     private val onOpenAppPicker: () -> Unit,
     private val onOpenFilterPicker: (FilterMode) -> Unit,
     private val onOpenChangelog: () -> Unit,
+    private val onOpenHistory: () -> Unit,
     private val onCheckUpdate: () -> Unit,
     private val onOpenPermission: (Int) -> Unit,
     private val onSendTest: () -> Unit,
@@ -52,8 +60,11 @@ class SettingsPage(
     private lateinit var filterRow: View
     private lateinit var orientationValue: TextView
     private lateinit var contentValue: TextView
+    private lateinit var throttleValue: TextView
     private lateinit var quietRange: TextView
     private lateinit var styleHint: TextView
+    private lateinit var themeHint: TextView
+    private lateinit var historyCount: TextView
     private lateinit var updateValue: TextView
     private lateinit var versionValue: TextView
     private lateinit var preview: DanmakuPreviewView
@@ -63,11 +74,16 @@ class SettingsPage(
     private val sliders = ArrayList<SliderHolder>()
     private val permissionStatuses = ArrayList<TextView>()
     private val styleChips = LinkedHashMap<CardStyle, TextView>()
+    private val themeChips = LinkedHashMap<CardTheme, TextView>()
     private val keywordChips = LinkedHashMap<KeywordMode, TextView>()
 
     private var binding = false
     private var introPlayed = false
     private lateinit var rootContainer: LinearLayout
+
+    private val uiHandler = Handler(Looper.getMainLooper())
+    /** 关键词输入防抖：每次按键都落盘会很浪费，停止输入后再写。 */
+    private val persistKeywords = Runnable { SettingsStore.persist() }
 
     private class SliderHolder(
         val bar: SeekBar,
@@ -122,6 +138,8 @@ class SettingsPage(
 
             styleChips.forEach { (style, chip) -> applyChipStyle(chip, style == settings.cardStyle) }
             styleHint.text = settings.cardStyle.desc
+            themeChips.forEach { (theme, chip) -> applyChipStyle(chip, theme == settings.cardTheme) }
+            themeHint.text = themeHintText(settings)
             keywordChips.forEach { (mode, chip) ->
                 applyChipStyle(chip, mode == settings.keywordMode)
             }
@@ -133,14 +151,17 @@ class SettingsPage(
             }
 
             contentValue.text = settings.contentMode.label
+            throttleValue.text = throttleLabel(settings.throttlePerMinute)
             quietRange.text = "${formatMinuteOfDay(settings.quietStartMinute)} → " +
                 formatMinuteOfDay(settings.quietEndMinute)
             quietRange.alpha = if (settings.quietEnabled) 1f else 0.45f
+            historyCount.text = "${HistoryStore.count()} 条"
 
             preview.style = settings.cardStyle
             preview.cardAlphaPercent = settings.cardAlphaPercent
             preview.textAlphaPercent = settings.alphaPercent
             preview.showIcon = settings.showAppIcon
+            preview.dark = settings.resolveDark(activity.resources.configuration.uiMode)
             preview.invalidate()
 
             versionValue.text = "v${BuildConfig.VERSION_NAME} · build ${BuildConfig.VERSION_CODE}"
@@ -397,6 +418,31 @@ class SettingsPage(
         }
         card.addView(styleHint)
 
+        card.addView(label("卡片主题", top = 14))
+        val themeChipsRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        CardTheme.entries.forEach { theme ->
+            val item = chip(theme.label) {
+                update { it.copy(cardTheme = theme) }
+            }
+            themeChips[theme] = item
+            themeChipsRow.addView(
+                item,
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = if (theme == CardTheme.AUTO) 0 else activity.dp(8)
+                },
+            )
+        }
+        card.addView(themeChipsRow, wrap(top = 8))
+
+        themeHint = activity.textView("", 11f, Palette.MUTED).apply {
+            setPadding(0, activity.dp(8), 0, activity.dp(4))
+            setLineSpacing(0f, 1.25f)
+        }
+        card.addView(themeHint)
+
         sliderRow(card, "cardAlpha", "卡片透明度", { "$it%" }, 0, 100) {
             copy(cardAlphaPercent = it)
         }
@@ -430,6 +476,7 @@ class SettingsPage(
                         cardStyle = CardStyle.BUBBLE,
                         cardAlphaPercent = 92,
                         alphaPercent = 100,
+                        cardTheme = CardTheme.LIGHT,
                         positionPercent = 12,
                         laneCount = 5,
                         fontSp = 16,
@@ -514,6 +561,20 @@ class SettingsPage(
         )
         card.addView(activity.divider())
 
+        val throttleTrailing = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        throttleValue = activity.textView("不限", 12f, Palette.ACCENT, true)
+        throttleTrailing.addView(throttleValue)
+        throttleTrailing.addView(chevron())
+        card.addView(
+            activity.settingRow("频率限制", "群聊刷屏时，每分钟最多显示多少条", throttleTrailing) {
+                showThrottleDialog()
+            },
+        )
+        card.addView(activity.divider())
+
         card.addView(label("关键词策略", top = 14))
         val chips = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -557,9 +618,18 @@ class SettingsPage(
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
             override fun afterTextChanged(s: Editable?) {
+                // 只更新内存中的设置：这里不做整页刷新，否则每敲一个字都会查一遍包名
                 SettingsStore.update({ it.copy(blacklist = s?.toString().orEmpty()) }, persist = false)
+                uiHandler.removeCallbacks(persistKeywords)
+                uiHandler.postDelayed(persistKeywords, 600L)
             }
         })
+        edit.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                uiHandler.removeCallbacks(persistKeywords)
+                SettingsStore.persist()
+            }
+        }
         card.addView(
             edit,
             LinearLayout.LayoutParams(
@@ -610,6 +680,33 @@ class SettingsPage(
         )
         card.addView(activity.divider())
 
+        val historyTrailing = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        historyCount = activity.textView("0 条", 12f, Palette.ACCENT, true)
+        historyTrailing.addView(historyCount)
+        historyTrailing.addView(chevron())
+        card.addView(
+            activity.settingRow("消息记录", "最近 60 条已转发的弹幕，点击可复制", historyTrailing) {
+                onOpenHistory()
+            },
+        )
+        card.addView(activity.divider())
+
+        val clearTrailing = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        clearTrailing.addView(activity.textView("清空", 12f, Palette.DANGER, true))
+        clearTrailing.addView(chevron())
+        card.addView(
+            activity.settingRow("清空统计数据", "转发条数、运行时长与消息记录", clearTrailing) {
+                confirmClearStats()
+            },
+        )
+        card.addView(activity.divider())
+
         // 系统没有公开「添加磁贴」的入口，这里只做说明，右侧留空避免看起来像可点
         card.addView(
             activity.settingRow(
@@ -629,6 +726,20 @@ class SettingsPage(
             },
         )
         return card
+    }
+
+    private fun confirmClearStats() {
+        AlertDialog.Builder(activity)
+            .setTitle("清空统计数据")
+            .setMessage("累计 / 今日转发条数、累计运行时长、主页「最近一条」与消息记录都会被清除，且无法恢复。")
+            .setPositiveButton("清空") { _, _ ->
+                StatsStore.reset()
+                HistoryStore.clear()
+                refresh()
+                onSettingsChanged()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun permissionCard(): View {
@@ -707,6 +818,10 @@ class SettingsPage(
         activity.textView(text, 12f, Palette.TEXT_DIM, true).apply {
             gravity = Gravity.CENTER
             setPadding(0, activity.dp(9), 0, activity.dp(9))
+            // 窄屏上三等分后放不下四个字，必须单行 + 省略，否则 chips 高度不齐
+            maxLines = 1
+            isSingleLine = true
+            ellipsize = android.text.TextUtils.TruncateAt.END
             isClickable = true
             setOnClickListener { onClick() }
         }
@@ -794,6 +909,35 @@ class SettingsPage(
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    private fun throttleLabel(value: Int): String = if (value <= 0) "不限" else "$value 条/分"
+
+    private fun showThrottleDialog() {
+        val options = THROTTLE_OPTIONS
+        val labels = options.map { if (it <= 0) "不限" else "每分钟 $it 条" }.toTypedArray()
+        val current = options.indexOf(SettingsStore.settings.value.throttlePerMinute).coerceAtLeast(0)
+        AlertDialog.Builder(activity)
+            .setTitle("频率限制")
+            .setMessage("群聊短时间涌入大量消息时，超出上限的部分不会显示，也不会计入统计。")
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                update { it.copy(throttlePerMinute = options[which]) }
+                dialog.dismiss()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun themeHintText(settings: AppSettings): String {
+        val uiMode = activity.resources.configuration.uiMode
+        val systemDark = (uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+        return when (settings.cardTheme) {
+            CardTheme.LIGHT -> CardTheme.LIGHT.desc
+            CardTheme.DARK -> CardTheme.DARK.desc
+            CardTheme.AUTO -> "系统当前为${if (systemDark) "深色" else "浅色"}模式，弹幕会使用" +
+                "${if (systemDark) "深色卡片 + 浅色文字" else "浅色卡片 + 深色文字"}。"
+        }
     }
 
     private fun filterHint(settings: AppSettings): String = when (settings.filterMode) {

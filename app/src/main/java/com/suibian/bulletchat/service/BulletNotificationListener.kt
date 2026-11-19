@@ -11,6 +11,8 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.suibian.bulletchat.data.ContentMode
+import com.suibian.bulletchat.data.HistoryEntry
+import com.suibian.bulletchat.data.HistoryStore
 import com.suibian.bulletchat.data.SettingsStore
 import com.suibian.bulletchat.data.StatsStore
 import com.suibian.bulletchat.model.DanmakuMessage
@@ -26,12 +28,14 @@ class BulletNotificationListener : NotificationListenerService() {
         super.onCreate()
         SettingsStore.init(this)
         StatsStore.init(this)
+        HistoryStore.init(this)
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
         SettingsStore.init(this)
         StatsStore.init(this)
+        HistoryStore.init(this)
         // 部分 ROM 在勿扰 / 省电时回收前台服务，这里用常驻的通知监听把弹幕服务拉回来
         if (SettingsStore.settings.value.enabled && !OverlayService.isRunning) {
             Log.w(TAG, "弹幕服务未运行，尝试恢复")
@@ -50,6 +54,9 @@ class BulletNotificationListener : NotificationListenerService() {
 
     private val recent = LinkedHashMap<String, Long>()
     private val labelCache = HashMap<String, String>()
+
+    /** 最近一分钟内的投递时刻，用于「频率限制」。 */
+    private val deliveries = ArrayDeque<Long>()
 
     override fun onNotificationPosted(sbn: StatusBarNotification?, rankingMap: RankingMap?) {
         val notification = sbn?.notification ?: return
@@ -99,7 +106,13 @@ class BulletNotificationListener : NotificationListenerService() {
             Log.d(TAG, "关键词过滤：$title / $text")
             return
         }
-        if (isDuplicate("$pkg|$title|$text")) return
+        if (isDuplicate(sbn, title, text)) return
+
+        // 频率限制放在最后：被限流的消息既不上屏，也不计数
+        if (!allowRate(settings.throttlePerMinute)) {
+            Log.d(TAG, "超过频率限制，跳过：$title")
+            return
+        }
 
         val appLabel = resolveAppLabel(pkg)
         val icon = if (settings.showAppIcon) AppIconLoader.load(this, pkg, 36) else null
@@ -123,6 +136,15 @@ class BulletNotificationListener : NotificationListenerService() {
         if (delivered) {
             // 只有真正交给悬浮层才计数，避免服务未就绪时把统计刷高
             StatsStore.recordForwarded(appLabel, shownTitle, shownText)
+            HistoryStore.record(
+                HistoryEntry(
+                    packageName = pkg,
+                    appLabel = appLabel,
+                    title = shownTitle,
+                    text = shownText,
+                    time = System.currentTimeMillis(),
+                ),
+            )
         } else {
             // 没有可用悬浮层：拉起服务（已运行时会尝试补挂），本条不补发
             Log.d(TAG, "悬浮层未就绪，本条消息未投递：$title")
@@ -205,12 +227,26 @@ class BulletNotificationListener : NotificationListenerService() {
             calendar.get(java.util.Calendar.MINUTE)
     }
 
-    private fun isDuplicate(key: String): Boolean {
+    /**
+     * 去重：
+     * - 同一条通知（key + postTime 相同）5 秒内重复回调，直接忽略
+     * - 内容完全相同且间隔极短（< 900ms）视为重复
+     *
+     * 之前只用「包名 + 内容」做 2.5 秒去重，会把「好的」「在吗」这类
+     * 短时间内重复出现的正常消息误杀，这里按通知身份区分。
+     */
+    private fun isDuplicate(sbn: StatusBarNotification, title: String, text: String): Boolean {
         val now = SystemClock.elapsedRealtime()
-        val last = recent[key]
-        if (last != null && now - last < 2500L) return true
+        val notificationKey = "n|${sbn.key}|${sbn.postTime}"
+        val contentKey = "c|${sbn.packageName}|$title|$text"
 
-        recent[key] = now
+        val lastSameNotification = recent[notificationKey]
+        if (lastSameNotification != null && now - lastSameNotification < 5_000L) return true
+        val lastSameContent = recent[contentKey]
+        if (lastSameContent != null && now - lastSameContent < 900L) return true
+
+        recent[notificationKey] = now
+        recent[contentKey] = now
         if (recent.size > 60) {
             val iterator = recent.entries.iterator()
             while (iterator.hasNext()) {
@@ -219,6 +255,18 @@ class BulletNotificationListener : NotificationListenerService() {
             if (recent.size > 120) recent.clear()
         }
         return false
+    }
+
+    /** 一分钟滑动窗口限流；perMinute <= 0 表示不限制。 */
+    private fun allowRate(perMinute: Int): Boolean {
+        if (perMinute <= 0) return true
+        val now = SystemClock.elapsedRealtime()
+        while (deliveries.isNotEmpty() && now - deliveries.first() > 60_000L) {
+            deliveries.removeFirst()
+        }
+        if (deliveries.size >= perMinute) return false
+        deliveries.addLast(now)
+        return true
     }
 
     private fun resolveAppLabel(pkg: String): String {

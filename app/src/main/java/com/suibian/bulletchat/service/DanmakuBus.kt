@@ -32,6 +32,9 @@ object DanmakuBus {
      */
     fun emit(message: DanmakuMessage): Boolean {
         val view = target?.get() ?: return false
+        // 视图还没布局完成（width == 0）时 push 会被丢弃，这里提前返回 false，
+        // 让调用方按「未投递」处理，而不是把统计和记录刷高。
+        if (!view.isAttachedToWindow || view.width <= 0) return false
         if (Looper.myLooper() == Looper.getMainLooper()) {
             return view.push(message)
         }

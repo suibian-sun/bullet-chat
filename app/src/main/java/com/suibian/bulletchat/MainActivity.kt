@@ -15,6 +15,7 @@ import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.suibian.bulletchat.data.FilterMode
+import com.suibian.bulletchat.data.HistoryStore
 import com.suibian.bulletchat.data.SettingsStore
 import com.suibian.bulletchat.data.StatsStore
 import com.suibian.bulletchat.service.OverlayService
@@ -51,6 +52,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         SettingsStore.init(this)
         StatsStore.init(this)
+        HistoryStore.init(this)
         UpdateChecker.init(this)
         applyEdgeToEdge()
 
@@ -75,6 +77,7 @@ class MainActivity : Activity() {
             onOpenAppPicker = { openPicker(AppPickerActivity.TARGET_SOURCE) },
             onOpenFilterPicker = { mode -> openFilterPicker(mode) },
             onOpenChangelog = { startActivity(Intent(this, ChangelogActivity::class.java)) },
+            onOpenHistory = { startActivity(Intent(this, HistoryActivity::class.java)) },
             onCheckUpdate = { checkUpdate(manual = true) },
             onOpenPermission = { openPermission(it) },
             onSendTest = { sendTestDanmaku() },

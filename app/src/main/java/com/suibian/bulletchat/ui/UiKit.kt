@@ -163,8 +163,19 @@ fun Context.textView(
 fun Context.eyebrow(text: String, color: Int = Palette.ACCENT): TextView =
     textView(text.uppercase(Locale.getDefault()), 10f, color, true, 0.16f)
 
-fun Context.divider(color: Int = 0x0F1B3455): View =
-    View(this).apply { setBackgroundColor(color) }
+/**
+ * 1dp 分隔线。
+ * 必须显式给高度：只设置背景色的空 View 在 LinearLayout 里按 WRAP_CONTENT
+ * 测量出来是 0 高度，整条线会「消失」，卡片里的各项就糊成一片。
+ */
+fun Context.divider(color: Int = 0x141B3455): View =
+    View(this).apply {
+        setBackgroundColor(color)
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(1).coerceAtLeast(1),
+        )
+    }
 
 fun ImageView.tint(color: Int) {
     imageTintList = ColorStateList.valueOf(color)

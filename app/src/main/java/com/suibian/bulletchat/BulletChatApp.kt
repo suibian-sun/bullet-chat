@@ -1,6 +1,7 @@
 package com.suibian.bulletchat
 
 import android.app.Application
+import com.suibian.bulletchat.data.HistoryStore
 import com.suibian.bulletchat.data.SettingsStore
 import com.suibian.bulletchat.data.StatsStore
 import com.suibian.bulletchat.update.UpdateChecker
@@ -10,6 +11,7 @@ class BulletChatApp : Application() {
         super.onCreate()
         SettingsStore.init(this)
         StatsStore.init(this)
+        HistoryStore.init(this)
         UpdateChecker.init(this)
     }
 }

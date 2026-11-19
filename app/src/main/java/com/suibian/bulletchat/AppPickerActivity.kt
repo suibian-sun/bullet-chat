@@ -459,9 +459,16 @@ class AppPickerActivity : Activity() {
             holder.label.text = entry.label
             holder.pkg.text = entry.packageName
             holder.toggle.isChecked = entry.packageName in selected
-            holder.icon.setImageBitmap(
-                AppIconLoader.load(this@AppPickerActivity, entry.packageName, 34),
-            )
+
+            // 图标解码放到后台线程：ListView 快速滚动时不会因为同步取图标而掉帧。
+            // tag 用来防止复用行时把上一行的图标错贴到这一行。
+            holder.icon.tag = entry.packageName
+            holder.icon.setImageDrawable(null)
+            AppIconLoader.loadAsync(this@AppPickerActivity, entry.packageName, 34) { bitmap ->
+                if (holder.icon.tag == entry.packageName) {
+                    holder.icon.setImageBitmap(bitmap)
+                }
+            }
             return row
         }
     }
